@@ -11,10 +11,14 @@
             "id": "acee425d4784b86d",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "关系图谱"
+              "type": "markdown",
+              "state": {
+                "file": "raw/多智能体协作指南：五种主流模式怎么选、怎么用？【译】.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "多智能体协作指南：五种主流模式怎么选、怎么用？【译】"
             }
           }
         ]
@@ -190,15 +194,37 @@
   },
   "active": "acee425d4784b86d",
   "lastOpenFiles": [
+    "raw/三万字最全解析！从零实现Transformer（小白必会版😃）.md",
+    "raw/万字干货：理解 Harness Engineering，看这一篇就够了.md",
+    "raw/一文了解Transformer全貌（图解Transformer）.md",
+    "raw/llm-wiki.md",
+    "raw/LLM.md",
+    "raw/Attention Is All You Need.md",
+    "raw/How I use Obsidian.md",
+    "raw/Transformer Explainer LLM Transformer Model Visually Explained.md",
+    "raw/Harness engineering leveraging Codex in an agent-first world 1.md",
+    "raw/Harness engineering for coding agent users.md",
+    "raw/Transformer模型详解（图解最完整版）.md",
+    "raw/Oh My Codex (OMX) Multi-Agent Orchestration Layer for AI Development.md",
+    "raw/Transformer - Wikipedia.md",
+    "raw/Transformer Basics and Transformer Principles of Operation.md",
+    "raw/狗都能看懂的Self-Attention讲解_self attention-CSDN博客.md",
+    "raw/一文搞定自注意力机制（Self-Attention）-CSDN博客.md",
+    "raw/【超详细】【原理篇&实战篇】一文读懂Transformer-CSDN博客.md",
+    "raw/DeepSeek/README.md",
+    "raw/Gemma/README.md",
+    "raw/Gemma/Gemma.md",
+    "raw/MachineLearning/StableDiffusion.md",
+    "raw/MachineLearning/DeepLearn/README.md",
+    "raw/MachineLearning/README.md",
+    "raw/Workflow/README.md",
+    "raw/Workflow/MCP.md",
+    "raw/Workflow/Docker-n8n-ollama.md",
+    "Rraw",
+    "wiki/reports",
     "未命名.base",
-    "Harness/Harness engineering leveraging Codex in an agent-first world 1.md",
-    "Obsidian/How I use Obsidian.md",
-    "Harness/工程技术：在智能体优先的世界中利用 Codex.md",
-    "Tools/大模型工具对比：SGLang, Ollama, VLLM, LLaMA.cpp如何选择？.md",
-    "Harness/Harness engineering leveraging Codex in an agent-first world.md",
     "Harness",
     "Tools",
-    "Steph Ango.md",
     "Obsidian"
   ]
 }
