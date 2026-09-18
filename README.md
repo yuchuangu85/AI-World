@@ -2,6 +2,14 @@
 
 [toc]
 
+## 原理
+
+* [逐层分解Transformer](https://v11enp9ok1h.feishu.cn/wiki/HkKlw30wpiGrSRkDncZclgN2nQd)
+
+
+
+
+
 ## 模型开源微调平台
 
 * [Kaggle: Your Home for Data Science](https://www.kaggle.com/) -- 微调平台（Google邮箱注册）
