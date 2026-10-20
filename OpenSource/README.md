@@ -18,3 +18,14 @@
 
 * [Comfy-Org/ComfyUI: The most powerful and modular diffusion model GUI, api and backend with a graph/nodes interface. The fastest local inference engine in the world.](https://github.com/Comfy-Org/ComfyUI)
 * [MiniMax-AI/MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3)
+
+
+
+## 破解
+
+* codex+Ghidra，codex + rea
+* [morluto/rea: Reverse engineer anything with agents, from app behavior down to native binaries.](https://github.com/morluto/rea)
+* [NationalSecurityAgency/ghidra: Ghidra is a software reverse engineering (SRE) framework](https://github.com/NationalSecurityAgency/ghidra)
+
+
+
