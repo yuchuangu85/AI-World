@@ -12,6 +12,6 @@
 * [NationalSecurityAgency/ghidra: Ghidra is a software reverse engineering (SRE) framework](https://github.com/NationalSecurityAgency/ghidra)
 * [x64dbg/x64dbg: An open-source user mode debugger for Windows. Optimized for reverse engineering and malware analysis.](https://github.com/x64dbg/x64dbg)
 
-> 组合： DSH+Ghidra+x64Dbg
+> 组合：DSH+Ghidra+x64Dbg
 >
 > 组合：codex+Ghidra
