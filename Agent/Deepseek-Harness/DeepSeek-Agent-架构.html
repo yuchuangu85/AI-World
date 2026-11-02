@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>DeepSeek Agent 架构 · 层级 / 走向 / 传递 / 返回</title>
+<meta name="description" content="DeepSeek Agent 架构（DSH 底座 + Super-agent 自治层）的八层结构、每层作用与设计、层间走向、下行传递与上行返回">
+<style>
+:root{
+  --bg:#fbfaf7; --bg-soft:#ffffff; --bg-alt:#f5f2ea; --bg-inset:#f8f6f0;
+  --fg:#1b1a17; --fg-2:#413e38; --fg-3:#736d62;
+  --line:#e6e1d6; --line-2:#efeae0;
+  --accent:#2f5ce0; --accent-2:#4d6bfe; --accent-soft:#eaefff;
+  --down:#2f5ce0; --down-soft:#eaefff;
+  --up:#0f8a6a; --up-soft:#e6f6f0;
+  --warn:#b07414; --warn-soft:#fbf1de;
+  --code-bg:#f4f1ea; --code-fg:#282520;
+  --shadow:0 1px 2px rgba(27,26,23,.05), 0 10px 30px rgba(27,26,23,.06);
+  --radius:14px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root[data-theme="auto"]{
+    --bg:#111317; --bg-soft:#171a1f; --bg-alt:#1b1f25; --bg-inset:#14171b;
+    --fg:#e9e6e0; --fg-2:#b6b0a5; --fg-3:#8a8478;
+    --line:#2a2e35; --line-2:#21252b;
+    --accent:#8fa6ff; --accent-2:#a8b9ff; --accent-soft:#1d2438;
+    --down:#8fa6ff; --down-soft:#1c2436;
+    --up:#4fd1a8; --up-soft:#142b25;
+    --warn:#e0ab52; --warn-soft:#2a2318;
+    --code-bg:#181c22; --code-fg:#d9d5cd;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.36);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111317; --bg-soft:#171a1f; --bg-alt:#1b1f25; --bg-inset:#14171b;
+  --fg:#e9e6e0; --fg-2:#b6b0a5; --fg-3:#8a8478;
+  --line:#2a2e35; --line-2:#21252b;
+  --accent:#8fa6ff; --accent-2:#a8b9ff; --accent-soft:#1d2438;
+  --down:#8fa6ff; --down-soft:#1c2436;
+  --up:#4fd1a8; --up-soft:#142b25;
+  --warn:#e0ab52; --warn-soft:#2a2318;
+  --code-bg:#181c22; --code-fg:#d9d5cd;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.36);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,"Segoe UI",Roboto,sans-serif;
+  font-size:16px; line-height:1.78; -webkit-font-smoothing:antialiased;
+}
+code,pre,.mono{font-family:var(--mono)}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ---------- chrome ---------- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:90;
+  background:linear-gradient(90deg,var(--accent),var(--up));transition:width .1s linear}
+.topbar{position:fixed;top:0;left:0;right:0;height:54px;z-index:80;display:flex;align-items:center;gap:12px;
+  padding:0 18px;border-bottom:1px solid var(--line-2);
+  background:var(--bg);
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter:saturate(160%) blur(12px);
+  backdrop-filter:saturate(160%) blur(12px)}
+.brand{display:flex;align-items:center;gap:9px;min-width:0}
+.brand-mark{width:26px;height:26px;border-radius:8px;flex:0 0 auto;
+  background:linear-gradient(140deg,var(--accent),var(--up));position:relative}
+.brand-mark::after{content:"";position:absolute;inset:7px;border-radius:3px;background:var(--bg)}
+.brand-text{font-size:14px;font-weight:650;color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.actions{margin-left:auto;display:flex;gap:6px;align-items:center}
+.ghost{display:inline-flex;align-items:center;justify-content:center;height:32px;min-width:32px;padding:0 10px;
+  border-radius:9px;border:1px solid var(--line);background:var(--bg-soft);color:var(--fg-2);
+  cursor:pointer;font-size:13px;font-family:inherit;transition:.15s}
+.ghost:hover{color:var(--fg);border-color:var(--fg-3)}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1160px;margin:0 auto;padding:0 22px}
+main{padding-top:54px}
+.hero{padding:56px 0 34px;border-bottom:1px solid var(--line-2)}
+.kicker{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--accent);font-weight:650;margin:0 0 16px}
+.kicker::before{content:"";width:22px;height:1.5px;background:var(--accent)}
+h1{font-size:clamp(28px,4.4vw,44px);line-height:1.22;margin:0 0 14px;letter-spacing:-.015em;font-weight:700}
+h1 em{font-style:normal;color:var(--accent)}
+.hero-sub{font-size:17px;color:var(--fg-2);max-width:60ch;margin:0 0 22px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}
+.chip{font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);
+  background:var(--bg-soft);color:var(--fg-2)}
+.chip b{color:var(--fg);font-weight:650}
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:var(--fg-3)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+.dot.base{background:linear-gradient(140deg,#7d8fa8,#5b6b82)}
+.dot.auto{background:linear-gradient(140deg,var(--accent),var(--up))}
+
+h2{font-size:clamp(21px,2.6vw,27px);margin:58px 0 8px;letter-spacing:-.01em;font-weight:680}
+h2 .num{color:var(--accent);font-family:var(--mono);font-size:.82em;margin-right:10px;font-weight:600}
+.lead{color:var(--fg-2);margin:0 0 26px;max-width:74ch}
+h3{font-size:18px;margin:0;font-weight:660}
+h4{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin:0 0 7px;font-weight:650}
+p{margin:0 0 12px}
+ul{margin:0;padding-left:1.1em}
+li{margin:3px 0}
+.small{font-size:13.5px;color:var(--fg-3)}
+
+/* ---------- at a glance table ---------- */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-soft);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:820px}
+th,td{padding:11px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line-2)}
+th{background:var(--bg-alt);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.lno{font-family:var(--mono);font-weight:650;color:var(--accent);white-space:nowrap}
+td.lno a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--line)}
+td.lno a:hover{color:var(--accent-2)}
+td.down-c,td .down-c{color:var(--down)} td.up-c,td .up-c{color:var(--up)}
+tbody tr:hover{background:var(--bg-inset)}
+
+/* ---------- layer cards ---------- */
+.layer{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-soft);
+  box-shadow:var(--shadow);margin:0 0 18px;overflow:hidden;scroll-margin-top:70px}
+.layer:target{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.layer-head{display:flex;gap:14px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid var(--line-2);
+  background:linear-gradient(180deg,var(--bg-inset),transparent)}
+.layer-no{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:#fff;
+  background:linear-gradient(140deg,#69788d,#4d5a6d);border-radius:8px;padding:5px 9px;flex:0 0 auto;margin-top:2px}
+.layer.auto .layer-no{background:linear-gradient(140deg,var(--accent),var(--up))}
+.layer-title{flex:1;min-width:0}
+.layer-tag{font-size:12.5px;color:var(--fg-3);margin:5px 0 0;font-family:var(--mono)}
+.layer-tag .side{font-family:inherit;font-size:11.5px;padding:2px 8px;border-radius:999px;
+  border:1px solid var(--line);color:var(--fg-2);background:var(--bg-alt);margin-left:8px}
+.layer-oneline{font-size:14px;color:var(--fg-2);margin:4px 0 0;max-width:30ch;text-align:right}
+.grid4{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.cell{padding:16px 20px;border-bottom:1px solid var(--line-2)}
+.cell:nth-child(odd){border-right:1px solid var(--line-2)}
+.cell p,.cell li{font-size:14px}
+.cell.down{background:color-mix(in srgb,var(--down-soft) 55%,transparent)}
+.cell.up{background:color-mix(in srgb,var(--up-soft) 55%,transparent)}
+.cell.down h4{color:var(--down)} .cell.up h4{color:var(--up)}
+.grid4 .cell:nth-last-child(-n+2){border-bottom:0}
+.payload{border-top:1px solid var(--line-2)}
+.payload summary{cursor:pointer;padding:11px 20px;font-size:13px;color:var(--fg-2);list-style:none;
+  display:flex;align-items:center;gap:8px;user-select:none}
+.payload summary::-webkit-details-marker{display:none}
+.payload summary::before{content:"▸";color:var(--accent);font-size:11px;transition:transform .15s}
+.payload[open] summary::before{transform:rotate(90deg)}
+.payload summary:hover{background:var(--bg-inset);color:var(--fg)}
+.payload-body{padding:0 20px 18px}
+pre{margin:0 0 10px;padding:13px 15px;background:var(--code-bg);color:var(--code-fg);border-radius:10px;
+  font-size:12.5px;line-height:1.65;overflow-x:auto;border:1px solid var(--line-2)}
+code{background:var(--code-bg);padding:.12em .38em;border-radius:5px;font-size:.9em}
+pre code{background:none;padding:0;font-size:inherit}
+.anchors{font-size:12.5px;color:var(--fg-3);font-family:var(--mono);line-height:1.9}
+.anchors b{font-family:inherit;color:var(--fg-2);font-weight:650}
+
+/* ---------- paths ---------- */
+.path{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-soft);
+  box-shadow:var(--shadow);margin:0 0 20px;overflow:hidden;scroll-margin-top:70px}
+.path-head{padding:18px 20px;border-bottom:1px solid var(--line-2);background:var(--bg-alt)}
+.path-no{display:inline-block;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.06em;
+  color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:3px 10px;margin-bottom:9px}
+.path-sub{font-size:13.5px;color:var(--fg-3);margin:6px 0 0}
+.hops{padding:16px 20px 20px}
+.hop{display:grid;grid-template-columns:48px 1fr;gap:14px;align-items:stretch}
+.hop-idx{font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(150deg,#69788d,#4d5a6d)}
+.hop.auto .hop-idx{background:linear-gradient(150deg,var(--accent),var(--up))}
+.hop-body{border:1px solid var(--line-2);border-radius:10px;padding:11px 14px;background:var(--bg-inset)}
+.hop-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:7px}
+.hop-name{font-weight:660;font-size:14.5px}
+.hop-act{font-size:12.5px;color:var(--fg-3);font-family:var(--mono)}
+.hop-pass,.hop-ret{font-size:13.5px;line-height:1.7;margin:3px 0}
+.hop-pass b,.hop-ret b{display:inline-block;min-width:62px;font-size:11.5px;letter-spacing:.03em}
+.hop-pass b{color:var(--down)} .hop-ret b{color:var(--up)}
+.hop-pass code{font-size:12px} .hop-ret code{font-size:12px}
+.arrow{display:flex;align-items:center;gap:10px;padding:7px 0 7px 60px;color:var(--fg-3);font-size:12px}
+.arrow::before{content:"↓";font-size:15px;color:var(--accent);line-height:1}
+.arrow span{font-family:var(--mono);font-size:11.5px}
+.hop.terminal .hop-body{border-color:var(--up);background:color-mix(in srgb,var(--up-soft) 60%,transparent)}
+
+/* ---------- rules ---------- */
+.rules{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.rule{border:1px solid var(--line);border-radius:12px;padding:15px 17px;background:var(--bg-soft);box-shadow:var(--shadow)}
+.rule b{display:block;font-size:14.5px;margin-bottom:4px}
+.rule span{font-size:13.5px;color:var(--fg-2)}
+.rule em{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--fg-3);display:block;margin-top:6px}
+
+/* ---------- status ---------- */
+.pill{display:inline-block;font-size:11.5px;font-weight:650;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.ok{color:#0f7a5e;background:#e4f5ee}
+.pill.part{color:#9a6512;background:#fbf1de}
+.pill.no{color:#a33b3b;background:#fbe9e9}
+@media (prefers-color-scheme: dark){
+  :root[data-theme="auto"] .pill.ok{color:#5fd6ac;background:#142a24}
+  :root[data-theme="auto"] .pill.part{color:#e7b75f;background:#2a2318}
+  :root[data-theme="auto"] .pill.no{color:#f08a8a;background:#2c1b1b}
+}
+:root[data-theme="dark"] .pill.ok{color:#5fd6ac;background:#142a24}
+:root[data-theme="dark"] .pill.part{color:#e7b75f;background:#2a2318}
+:root[data-theme="dark"] .pill.no{color:#f08a8a;background:#2c1b1b}
+
+/* ---------- footer / totop ---------- */
+footer{margin:70px 0 0;padding:28px 0 60px;border-top:1px solid var(--line-2);color:var(--fg-3);font-size:13px}
+footer a{color:var(--fg-2);text-decoration:underline;text-decoration-color:var(--line)}
+.totop{position:fixed;right:20px;bottom:20px;z-index:70;width:40px;height:40px;border-radius:50%;
+  border:1px solid var(--line);background:var(--bg-soft);color:var(--fg-2);cursor:pointer;
+  box-shadow:var(--shadow);display:none;align-items:center;justify-content:center;font-size:15px}
+.totop.show{display:flex}
+.totop:hover{color:var(--accent);border-color:var(--accent)}
+
+@media (max-width:820px){
+  .grid4{grid-template-columns:1fr}
+  .cell:nth-child(odd){border-right:0}
+  .layer-oneline{display:none}
+  .rules{grid-template-columns:1fr}
+  .hero{padding:38px 0 26px}
+  .hop{grid-template-columns:38px 1fr;gap:10px}
+  .arrow{padding-left:48px}
+}
+@media print{
+  .topbar,.progress,.totop,.actions{display:none!important}
+  body{background:#fff;color:#000;font-size:11pt}
+  .layer,.path,.rule,.tablewrap{box-shadow:none;break-inside:avoid}
+  .payload{display:block}
+  .payload summary{display:none}
+  .payload-body{display:block!important}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <div class="brand-text">DeepSeek Agent 架构 · 层级 / 走向 / 传递 / 返回</div>
+  </div>
+  <div class="actions">
+    <button class="ghost" id="themeBtn" type="button" title="切换主题">🌗 主题</button>
+    <button class="ghost" id="printBtn" type="button" title="打印 / 存 PDF">🖨 打印</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section class="hero">
+  <p class="kicker">Layered Architecture · Data Flow</p>
+  <h1>八层结构：<em>每一层干什么、怎么设计、往下传什么、往返回什么</em></h1>
+  <p class="hero-sub">
+    对象是 DeepSeek 官方开源的 Agent 体系：<b>DSH 底座</b>（L1–L4，单会话执行内核 + 无特权插件树）
+    与 <b>Super-agent 自治层</b>（L5–L8，多会话调度 + 事件准入）。
+    下面三件事一次讲清：<b>静态分层</b>、<b>动态走向</b>、<b>边界契约</b>。
+  </p>
+  <div class="chips">
+    <span class="chip"><b>8</b> 层</span>
+    <span class="chip"><b>5</b> 条典型链路</span>
+    <span class="chip"><b>11</b> 个边界契约</span>
+    <span class="chip">来源：公众号文章 + 两个 MIT 仓库 + 本机运行时抽查</span>
+    <span class="chip">生成于 2026-11-02</span>
+  </div>
+  <div class="legend">
+    <span><i class="dot base"></i>L1–L4 底座（DSH）：回答「一个 Agent 一次轮次怎么跑」</span>
+    <span><i class="dot auto"></i>L5–L8 自治层（Super-agent）：回答「多任务/多事件/多会话怎么协调」</span>
+  </div>
+</section>
+
+<h2><span class="num">00</span>先看全景：八层一览</h2>
+<p class="lead">
+  读法：<b>层是职责，链是走向</b>。同一层在不同链路里可能被跳过（例如「订阅直通」绕过 L7 准入）。
+  下表是「一屏看懂版」；每一层的完整说明在 <a href="#layers">01</a>，走向示例在 <a href="#flows">02</a>，载荷形状在 <a href="#contracts">03</a>。
+</p>
+
+<div class="tablewrap">
+<table>
+<thead>
+<tr><th>层</th><th>名称</th><th>作用（一句话）</th><th>下传（→）</th><th>返回（←）</th></tr>
+</thead>
+<tbody>
+<tr><td class="lno"><a href="#l8">L8</a></td><td>信道与人机面</td><td>Agent 的感官与嘴：IM / PR / 面板 / CLI</td><td class="down-c">原始事件（消息、评论、CI）</td><td class="up-c">回执 / 回答 / 结果 / 提问</td></tr>
+<tr><td class="lno"><a href="#l7">L7</a></td><td>事件准入</td><td>决定「谁能让 Agent 干活、多强、多大范围」</td><td class="down-c">Trigger 批 + Thread 快照 + Policy</td><td class="up-c">Decision + Mandate</td></tr>
+<tr><td class="lno"><a href="#l6">L6</a></td><td>自治调度（Router / Worker）</td><td>全局连续性归 Router，并发执行归 Worker</td><td class="down-c">Assignment（派工消息）</td><td class="up-c">Report + 结构化 Attention</td></tr>
+<tr><td class="lno"><a href="#l5">L5</a></td><td>领域与调度内核</td><td>一致性 / 幂等 / 崩溃恢复 / 可审计的地基</td><td class="down-c">命令（decide / report / reply…）</td><td class="up-c">DomainEvents + 事务结果</td></tr>
+<tr><td class="lno"><a href="#l4">L4</a></td><td>Agent 内核（turn / step）</td><td>把一次输入排空成若干「模型请求 + 工具」</td><td class="down-c">messages + 工具 schema + 模型选择</td><td class="up-c">assistant/message + tool/result</td></tr>
+<tr><td class="lno"><a href="#l3">L3</a></td><td>工具执行</td><td>把模型意图变成受控的真实副作用</td><td class="down-c">tool name + args</td><td class="up-c">tool/result（含 isError）</td></tr>
+<tr><td class="lno"><a href="#l2">L2</a></td><td>能力 seam</td><td>可替换的能力面：LLM / fs / shell / 沙箱 / skills / MCP</td><td class="down-c">能力调用（llm.stream、fs.write…）</td><td class="up-c">流式 chunk / 结果 / 分类错误</td></tr>
+<tr><td class="lno"><a href="#l1">L1</a></td><td>运行时与外部世界</td><td>真正的执行、持久化与网络</td><td class="down-c">HTTP / syscall / 文件 IO</td><td class="up-c">token 流 / 字节 / 退出码</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="layers"><span class="num">01</span>逐层拆解：作用 · 设计 · 下传 · 返回</h2>
+<p class="lead">
+  每张卡片四格固定：左上「作用」、右上「设计取舍」、左下「<span class="down-c">↓ 下传（请求）</span>」、
+  右下「<span class="up-c">↑ 返回（响应）</span>」。展开「载荷形状 / 锚点」可看真实数据结构与源码位置。
+</p>
+
+<!-- ============ L8 ============ -->
+<article class="layer auto" id="l8">
+  <div class="layer-head">
+    <span class="layer-no">L8</span>
+    <div class="layer-title">
+      <h3>信道与人机面</h3>
+      <p class="layer-tag">Channels &amp; Human Surface<span class="side">自治层</span></p>
+    </div>
+    <p class="layer-oneline">Agent 的感官与嘴</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>输入侧把 IM 群聊、GitHub Issue/PR 评论、CI 结果归一成事件；输出侧把结果按信道习惯表达。它决定了「人怎么感知到这个 Agent」。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>一个 Source = 事件流 + 写侧 Channel</b>：kind 可复用，instance 是一份配置</li>
+        <li><b>先把噪音挡在门外</b>：Source 在进入领域前就丢掉 bot 自己的消息与不在收听范围的 Trigger</li>
+        <li><b>不把终端交互搬进群聊</b>：IM 走 100 词硬限、GitHub 走高密度结构化交付</li>
+        <li><b>输出必须可恢复</b>：所有外发消息经 Outbox，按 Ticket+会话保序、失败退避重试</li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>不可变 Trigger（含 actor、地址、Thread 归属、Source 自有 meta）；原始记录可回读（用于深度上下文）。</p>
+      <p class="small">GitHub 侧是 60s 轮询，飞书侧是 live 事件消费 + 历史回填。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p>回执 / 回答 / 结果 / attention 四类消息；发送结果是 <code>sent</code> / <code>gone</code>（会话没了）/ <code>waiting</code>（Source 离线）。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>Trigger {
+  id, at,                 // 内容派生 id：sha256(JSON(values))[0:32]，天然幂等
+  human,                  // 是人写的吗（决定能不能唤醒已结束工单）
+  addressed,              // 'mention' | 'direct'，由 Source 声明
+  threads: [threadKey],   // 一条 Trigger 可同时属于多个 Thread
+  meta                    // Source 自有，核心不解释
+}</pre>
+      <p class="anchors">
+        <b>docs</b> 001-domain.md:27,31 · 003-execution.md:177-191<br>
+        <b>src</b> src/core/model.ts:22-39 · src/sources/github.ts:274-295（轮询）· src/sources/feishu-loops.ts:70-73（live）
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ L7 ============ -->
+<article class="layer auto" id="l7">
+  <div class="layer-head">
+    <span class="layer-no">L7</span>
+    <div class="layer-title">
+      <h3>事件准入</h3>
+      <p class="layer-tag">Policy · Gate · Assessment · Mandate<span class="side">自治层</span></p>
+    </div>
+    <p class="layer-oneline">谁能让它干活，干多大</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>把「高噪音、低触发率」的环境事件流筛成「值得开工的工作」，并给这份工作一个<b>可审计的授权依据</b>。它是文章里最轻、原型里最厚的一层。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>两段式</b>：确定性 <code>gate()</code> 快筛（白名单 / 点名 / 准入表 / bot 名单），再交模型 assessment 慢判</li>
+        <li><b>三种 accept mode</b>：<code>off</code> / <code>observe</code>（默认，只记录「本来会做什么」）/ <code>auto</code></li>
+        <li><b>授权不可变</b>：Mandate 三变——创建、人 stop、revalidate 失败吊销</li>
+        <li><b>改规则不打断在办工作</b>：Policy 版本变化只通知受影响的 Ticket，不强行取消</li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>Trigger 批 + Thread 快照 + 该 Thread 全部 Ticket（含已结束）+ 当前 Policy → 一次判定。</p>
+      <p class="small">gate 先给「强度」（explicit / inferred / 拒绝码），assessment 再给「方向与范围」。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p><b>Decision</b>（accept / stop / ignore / unavailable + 原因码）与 <b>Mandate</b>（策略版本、范围、强度、准入依据）。</p>
+      <p class="small">Decision 由 Router 通过批量路由真正「下单」，不是模型自由发挥。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>Decision { outcome: 'accept'|'stop'|'ignore'|'unavailable',
+           reasons: [{ code, values[], triggerId? }], ticket? }
+
+Mandate  { policyVersion, scope, strength: 'explicit'|'inferred',
+           basis: { via: 'addressed'|'followup'|'admission'|'bot',
+                    source, row, sender, rules[] } }</pre>
+      <p class="anchors">
+        <b>src</b> src/policy.ts:83-87（accept mode）· :167-211（gate）· :111-118（Policy 版本 hash）<br>
+        <b>docs</b> 002-authorization.md:47-54（强度表）· :56-75（准入表）· :129（Mandate 三变）
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ L6 ============ -->
+<article class="layer auto" id="l6">
+  <div class="layer-head">
+    <span class="layer-no">L6</span>
+    <div class="layer-title">
+      <h3>自治调度：Router / Worker</h3>
+      <p class="layer-tag">Main Session ↔ Executor Sessions<span class="side">自治层</span></p>
+    </div>
+    <p class="layer-oneline">一层分派，一层干活</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>把「维护全局连续性」与「高并发执行」拆成两层，让人从「盯着每一步」上移到「决策与验收」。这是整套架构的核心主张：<b>Session 应是实现细节</b>。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>Router 只分派不干活</b>：常驻单 Session（id 存 KV），刻意不实现细节；「不等结果」写成硬守卫（禁 sleep、禁长等待）</li>
+        <li><b>Worker 只干活不抢话</b>：每 Ticket 一 Session + 一目录，独立上下文、最强模型，只向 Router 汇报</li>
+        <li><b>订阅直通</b>：同一 Thread 的后续事件由程序直发 Worker，不再绕 Router</li>
+        <li><b>批量下单</b>：一次 <code>route</code> 带 1–20 条决定；路由备注 ≤30 词，禁止改写需求</li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>Assignment（派工）：标题 + ≤1500 字符任务说明 + 源 Trigger 卡 + ≤30 词路由备注 + 执行环境变量（工单目录 / 名称 / id）。</p>
+      <p class="small">并发默认 3（1–16），另留 1 个槽位专供人的消息；后台作业最多 30 分钟。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p><b>Report</b>（progress / waiting / ready / blocked / failed / dropped）+ 结构化 <b>Attention</b>（需要人决定的问题）。</p>
+      <p class="small">越界请求不是硬顶，而是 <code>handback</code> 交回准入层重新分派。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>派工消息 { title, assignment(≤1500 chars), sourceTriggerCard,
+           routingNote(≤30 words), env{ DSH_SUPERAGENT_DIR/NAME/TICKET } }
+
+Report   { state, summary(≤600 chars), question? }
+Attention{ 结构化字段 → 路由到原始对话，而非写进报告正文 }</pre>
+      <p class="anchors">
+        <b>src</b> src/app/runtime.ts:104-105,210（main Session 常驻）· src/app/sessions.ts:72-77（noWait 守卫）<br>
+        <b>prompts</b> prompts/orchestrator.md:1-4 · prompts/worker.md · prompts/dispatch.md:41<br>
+        <b>docs</b> 003-execution.md:25,33-39,59
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ L5 ============ -->
+<article class="layer auto" id="l5">
+  <div class="layer-head">
+    <span class="layer-no">L5</span>
+    <div class="layer-title">
+      <h3>领域与调度内核</h3>
+      <p class="layer-tag">Engine · Effects · Outbox · Store<span class="side">自治层</span></p>
+    </div>
+    <p class="layer-oneline">自治能成立的地基</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>保证多会话并发下的<b>一致性、幂等、崩溃可恢复、可审计</b>。没有这一层，「主动」= 重复劳动 + 重复消息。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>Engine 是唯一写者</b>：所有命令同步、每命令一事务；端口在事务内入队，适配器在提交后执行</li>
+        <li><b>先落库后执行</b>：Effects 持久副作用队列，6 种 kind 各有并发上限与退避</li>
+        <li><b>Outbox 回执</b>：消息「入队」与「回执」同一事务，保证不重不漏</li>
+        <li><b>单库 9 表 + 生成列索引</b>：每轮只读「活跃工作」，不扫全表</li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>命令：<code>receive</code> / <code>decide</code> / <code>attach</code> / <code>bindThread</code> / <code>assignmentStarted</code> / <code>report</code> / <code>reply</code> / <code>evaluateDue</code> / <code>policyChanged</code>。</p>
+      <p class="small">调用方只拿到自己角色那一份接口（Sources / MainSession / People / Settings / Executor）。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p>领域事件：<code>trigger.received</code> · <code>eval.started</code> · <code>decision.recorded</code> · <code>ticket.created/ended</code> · <code>assignment.started/ended</code> · <code>policy.changed</code>。</p>
+      <p class="small">命令返回事务结果；副作用返回 effect 行（kind / key / payload / due）。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>Effect { kind: 'assessment'|'launch'|'delivery'|'relay'|'notice'|'reply',
+         key, payload, due, attempts }
+// 同一 kind/key 只有一行；重复入队=替换 payload 并立即到期
+
+命令 → 事务提交 → 事件；失败回滚 → 不产生副作用（afterCommit 才执行）</pre>
+      <p class="anchors">
+        <b>src</b> src/core/engine.ts · src/app/effects.ts · src/app/outbox.ts · src/app/store.ts<br>
+        <b>docs</b> 007-architecture.md:44-50（Engine 约束）· :172-181（6 类 effect）· :452-466（9 张表）
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ L4 ============ -->
+<article class="layer" id="l4">
+  <div class="layer-head">
+    <span class="layer-no">L4</span>
+    <div class="layer-title">
+      <h3>Agent 内核：turn / step</h3>
+      <p class="layer-tag">agent-loop · session log · system-prompt<span class="side">底座 DSH</span></p>
+    </div>
+    <p class="layer-oneline">一次输入的排空</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>把「一次输入」推进成「若干次模型请求 + 工具执行」。这是所有 Agent 产品的最低共同层，也是唯一必须逐字正确的一层。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>turn ⊃ step</b>：turn = 排空一次输入；step = 一次模型请求 + 其工具；turn 可含 0 个 step</li>
+        <li><b>会话日志是唯一真源</b>：「模型可见即已记录」，历史从日志派生</li>
+        <li><b>扩展点放事件上</b>：<code>agent/pre-step</code>、<code>agent/request</code>、<code>llm/stream</code>、<code>tools/*</code> 都是 waterfall</li>
+        <li><b>连 loop 都可替换</b>：插件依赖 <code>agent</code>，绝不依赖 <code>agent-loop</code></li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>组装后的 messages（系统提示 + 历史 + 新输入）+ 本步工具 schema + 模型选择（快照后冻结）。</p>
+      <p class="small">请求一旦发出不可变；取消则 system 与 user 都不提交。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p><code>assistant/message</code>（含 tool calls）或 <code>assistant/attempt</code>（失败尝试）+ <code>tool/result</code> + usage。</p>
+      <p class="small">全部追加回日志，供下一步派生；压缩只隐藏条目、不删除历史。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>turn/start → [step/start → agent/request → system/message + user/message
+              → llm/stream* → assistant/message
+              → tool/call* → tool/result*] → step/end
+           → agent/turn-stopping → turn/end</pre>
+      <p class="anchors">
+        <b>docs</b> architecture.zh.md#turn-flow · agent-lifecycle.zh.md · glossary.zh.md（turn / step / Round / exchange）<br>
+        <b>pkg</b> packages/core/{agent, agent-loop, session, system-prompt, tools} · packages/llm/llm
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ L3 ============ -->
+<article class="layer" id="l3">
+  <div class="layer-head">
+    <span class="layer-no">L3</span>
+    <div class="layer-title">
+      <h3>工具执行</h3>
+      <p class="layer-tag">tool/call → pre-execute → guards → approval → execute → post-execute → tool/result<span class="side">底座 DSH</span></p>
+    </div>
+    <p class="layer-oneline">意图变副作用的地方</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>把模型的「想调用」变成「真执行」，并且在中间插入权限、沙箱、审批、结果改写——<b>而不改主循环一行</b>。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>先记录后执行</b>：<code>tool/call</code> 先进会话日志，崩溃也能知道「它想干什么」</li>
+        <li><b>策略插在 seam 上</b>：hook / 权限 / 沙箱走 pre-execute，改策略不用改循环</li>
+        <li><b>审批是 fail-closed</b>：一次性询问，缺失或无法回答即拒绝</li>
+        <li><b>三段 waterfall</b>：pre / execute / post 都能转换调用，post 还能 replace 或追加 context</li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>tool name + 已解析参数（schema 校验后）；可能附带一次「更宽沙箱模式」的重试声明。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p><code>tool/result</code>：content blocks + <code>isError</code>。被拒绝 / 拒绝审批也走同一条通道返回，模型无法区分「工具不存在」与「被拦」。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>tool/result { content: [ {type:'text'|'image', …} ], isError: boolean }
+
+denied  { reason }            // 与失败结果同一形状，模型无需特殊处理
+sandbox denied → "[sandbox: file access denied under workspace-write mode]"
+                 + 一次更宽模式重试提示</pre>
+      <p class="anchors">
+        <b>docs</b> tool-execution-pipeline.zh.md（完整流水线图）· architecture.zh.md（tools 三 waterfall）<br>
+        <b>pkg</b> packages/core/tools · packages/sandbox/* · packages/shell/* · packages/guard/*
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ L2 ============ -->
+<article class="layer" id="l2">
+  <div class="layer-head">
+    <span class="layer-no">L2</span>
+    <div class="layer-title">
+      <h3>能力 seam</h3>
+      <p class="layer-tag">ctx.llm · ctx.fs · ctx.shell · ctx.sandbox · ctx.skills · ctx.mcpResources …<span class="side">底座 DSH</span></p>
+    </div>
+    <p class="layer-oneline">可替换的能力面</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>提供「真实能力」，同时把所有能力做成可替换的缝：换模型、换沙箱、换 shell、换持久化后端，都不动上层。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>一个 <code>ctx.&lt;key&gt;</code> = 一个 seam</b>：Service Definition + Provider + Consumer 三角色</li>
+        <li><b>按 key 查找，不 import 实现</b>：上层不知道底层是谁</li>
+        <li><b>注册可逆</b>：<code>ctx.effect()</code> / <code>ctx.on()</code> 返回 disposer，卸载即撤销</li>
+        <li><b>作用域两层</b>：全局，或绑定恰好一个 agent scope（不向下继承给 subagent）</li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>能力调用：<code>llm.stream</code>、<code>fs.write</code>、<code>shell.exec</code>、<code>tools.register</code>、<code>skills</code> 注入、<code>mcp</code> 调用、<code>jobs</code> / <code>schedule</code> 登记。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p>流式 chunk、写入结果、退出码、分类后的错误（可退避 / 可换模型 / 该压缩 / 别重试）。</p>
+      <p class="small">技能注入走 <code>user/message</code> 替换，不污染系统提示。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>seam 三角色（以 shell 为例）
+  Service Definition : dsh-shell            → ctx.shell
+  Provider(s)        : dsh-bash-local | dsh-bash-sandbox
+  Consumer           : dsh-tool-bash        （面向模型的工具）
+
+规模：372 个包 · 108 个 ctx.* 服务 · 76 条工具 schema</pre>
+      <p class="anchors">
+        <b>docs</b> glossary.zh.md#capability-seam · cordis-primer.zh.md（五概念 / 五分发模式）· subsystems/core.zh.md<br>
+        <b>pkg</b> packages/{llm,fs,shell,sandbox,skill,mcp,jobs,schedule,subagent,workflow,goal}/*
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ L1 ============ -->
+<article class="layer" id="l1">
+  <div class="layer-head">
+    <span class="layer-no">L1</span>
+    <div class="layer-title">
+      <h3>运行时与外部世界</h3>
+      <p class="layer-tag">model API · 执行环境 · 沙箱后端 · 凭据 · 会话文件 · SQLite<span class="side">底座 DSH</span></p>
+    </div>
+    <p class="layer-oneline">真正发生的地方</p>
+  </div>
+  <div class="grid4">
+    <div class="cell">
+      <h4>作用</h4>
+      <p>模型 API、进程、文件系统、持久化。上面七层全部是「组织方式」，只有这一层真的在花钱、真的在改文件。</p>
+    </div>
+    <div class="cell">
+      <h4>设计取舍</h4>
+      <ul>
+        <li><b>会话日志用不可变代际</b>：<code>session.vN.jsonl[.zstd]</code>，已提交代际绝不重命名/替换/删除，升级靠逐级迁移包</li>
+        <li><b>凭据不落到提示词</b>：走凭据 seam，失败 fail-closed</li>
+        <li><b>沙箱 ≠ 安全边界</b>（官方自述）：仍需一性 VM / 容器、最小权限、备份</li>
+        <li><b>桌面 = 壳 + 打包运行时</b>：Electron 用 <code>--port 0</code> 起完整 Web 应用，带 token 的 URL</li>
+      </ul>
+    </div>
+    <div class="cell down">
+      <h4>↓ 下传（请求）</h4>
+      <p>HTTP 请求（含流式）、syscall、文件 IO、子进程、持久化写入。</p>
+    </div>
+    <div class="cell up">
+      <h4>↑ 返回（响应）</h4>
+      <p>token 流与 usage、字节、退出码、持久化事件；错误按可恢复性分类后再上抛。</p>
+    </div>
+  </div>
+  <details class="payload">
+    <summary>载荷形状 / 锚点</summary>
+    <div class="payload-body">
+<pre>会话物理布局
+  v0: session.jsonl[.zstd]        （无版本号）
+  v1+: session.vN.jsonl[.zstd]    （现网 v3 / v4 并存）
+  迁移包 session-format-v0-to-v1 … v3-to-v4，一包一步</pre>
+      <p class="anchors">
+        <b>docs</b> session-format-status.zh.md · architecture.zh.md（桌面应用 / 会话日志）· SAFETY.zh.md<br>
+        <b>实测</b> 本机 Desktop 0.2.1-rc.5：Electron 44.7.0 / Node 24.21.0 / cordis 4.0.5，297 个 dsh-* 插件包
+      </p>
+    </div>
+  </details>
+</article>
+
+<!-- ============ FLOWS ============ -->
+<h2 id="flows"><span class="num">02</span>走向：五条链路，逐跳看传递与返回</h2>
+<p class="lead">
+  同一套分层，被五条不同的链路穿过。<b>绿框是终点</b>，<span class="down-c">蓝色 ↓ 是下传</span>，
+  <span class="up-c">绿色 ↑ 是返回</span>。注意「订阅直通」这条链会跳过 L7 准入——这是设计上的刻意。
+</p>
+
+<!-- path 1 -->
+<section class="path" id="path-1">
+  <div class="path-head">
+    <span class="path-no">链路 1 · 主链</span>
+    <h3>人在群里 @ 一句 → 落地成 PR</h3>
+    <p class="path-sub">9 跳，穿过全部 8 层。这是唯一由人显式发起的路径，也是「连续」特征的实现。</p>
+  </div>
+  <div class="hops">
+    <div class="hop auto">
+      <div class="hop-idx">L8</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">信道面</span><span class="hop-act">Source 归一 · 丢掉 bot 自己消息</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>群消息原文 + actor + 是否点名 + 地址</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>Trigger</code>（不可变，内容派生 id）</div>
+      </div>
+    </div>
+    <div class="arrow"><span>Trigger 落库，进入领域</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L7</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">事件准入</span><span class="hop-act">gate：名单内 + 点名 → explicit</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>Trigger 批 + Thread 快照 + 全部 Ticket + Policy</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>strength</code> / <code>basis</code>；模型研判后产出 candidate 卡</div>
+      </div>
+    </div>
+    <div class="arrow"><span>candidate 以消息 steer 进 Router 的轮次</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L6</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Router</span><span class="hop-act">orchestrator_route → accept（批量 1–20 条）</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>决定：accept + 标题 + worktree 名 + ≤30 词备注</div>
+        <div class="hop-ret"><b>返回 ↑</b>路由结果 <code>{results:[{trigger_id, kind}]}</code></div>
+      </div>
+    </div>
+    <div class="arrow"><span>Engine 在一个事务里建 Ticket + Mandate + Assignment + 订阅</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L5</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">调度内核</span><span class="hop-act">decide() → effect: launch</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>命令（同步、单事务）；effect 行（先落库）</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>ticket.created</code> / <code>assignment.started</code> 事件</div>
+      </div>
+    </div>
+    <div class="arrow"><span>提交后才执行：prepare 目录 → 起 worker Session</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L6</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Worker</span><span class="hop-act">独立 Session + 目录，开始 turn</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>派工消息：标题 + ≤1500 字任务 + 源 Trigger 卡 + 环境变量</div>
+        <div class="hop-ret"><b>返回 ↑</b>Report（progress → ready）+ 关联上 PR</div>
+      </div>
+    </div>
+    <div class="arrow"><span>worker 内部是一轮轮的 turn / step</span></div>
+    <div class="hop">
+      <div class="hop-idx">L4</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Agent 内核</span><span class="hop-act">组装 → 请求 → 工具 → 再请求</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>messages + 工具 schema + 模型选择（冻结）</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>assistant/message</code>（含 tool calls）+ <code>tool/result</code> + usage</div>
+      </div>
+    </div>
+    <div class="arrow"><span>模型要调 bash / gh</span></div>
+    <div class="hop">
+      <div class="hop-idx">L3</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">工具执行</span><span class="hop-act">pre-execute → 守卫 → 审批 → execute → post</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>tool name + args（先记 <code>tool/call</code>）</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>tool/result</code>（content + isError；denied 同形）</div>
+      </div>
+    </div>
+    <div class="arrow"><span>L2 能力 seam 内部：shell / fs / sandbox</span></div>
+    <div class="hop">
+      <div class="hop-idx">L2</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">能力 seam</span><span class="hop-act">ctx.shell / ctx.fs / ctx.sandbox</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>能力调用（按 ctx key 查找，不 import 实现）</div>
+        <div class="hop-ret"><b>返回 ↑</b>结果 / 流式 chunk / 分类错误</div>
+      </div>
+    </div>
+    <div class="hop terminal">
+      <div class="hop-idx">L1</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">运行时</span><span class="hop-act">git / 网络 / 文件系统</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>HTTP / syscall / 文件 IO</div>
+        <div class="hop-ret"><b>返回 ↑</b>字节、退出码、PR 号；再一路回流到 L8 的 IM 回执</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- path 2 -->
+<section class="path" id="path-2">
+  <div class="path-head">
+    <span class="path-no">链路 2 · 主动性</span>
+    <h3>没人 @ 它，它自己发现问题</h3>
+    <p class="path-sub">5 跳。区别全在 L7：<b>inferred</b> 强度，且默认 observe 只记录不执行。</p>
+  </div>
+  <div class="hops">
+    <div class="hop auto">
+      <div class="hop-idx">L8</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">信道面</span><span class="hop-act">轮询 / live 事件发现新评论、CI 失败</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>未点名事件（actor 可能是 bot）</div>
+        <div class="hop-ret"><b>返回 ↑</b>Trigger，<code>human</code> 与 <code>addressed</code> 如实标注</div>
+      </div>
+    </div>
+    <div class="arrow"><span>gate 判定：不在名单 / 未点名 → inferred，或直接拒绝</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L7</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">事件准入</span><span class="hop-act">program gate → model assessment</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>必须覆盖每条 enabled 规则、方向已定、有 intent 证据</div>
+        <div class="hop-ret"><b>返回 ↑</b>accept 还是 ignore；<code>observe</code> 下只记 <code>would_accept</code></div>
+      </div>
+    </div>
+    <div class="arrow"><span>只有 auto 模式 + 规则 enabled 才会真接单</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L6</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Router</span><span class="hop-act">审核候选卡，决定是否下单</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>接受 = 走主链；忽略 = 记 <code>ignoredFromCard</code></div>
+        <div class="hop-ret"><b>返回 ↑</b>决定与原因码（可审计）</div>
+      </div>
+    </div>
+    <div class="arrow"><span>之后与链路 1 的 L5→L4 完全一致</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L5</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">调度内核</span><span class="hop-act">建 Ticket，Mandate 记 inferred 依据</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>Mandate.basis.via = admission / bot</div>
+        <div class="hop-ret"><b>返回 ↑</b>可被 revalidate：规则改了，恢复前重判</div>
+      </div>
+    </div>
+    <div class="hop">
+      <div class="hop-idx">L4~L1</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">执行</span><span class="hop-act">与主链相同</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>同上</div>
+        <div class="hop-ret"><b>返回 ↑</b>Report；若确认是问题且修法简单才交付，否则保持安静</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- path 3 -->
+<section class="path" id="path-3">
+  <div class="path-head">
+    <span class="path-no">链路 3 · 订阅直通</span>
+    <h3>同一 Thread 的后续消息，直接到 Worker</h3>
+    <p class="path-sub">4 跳。<b>刻意跳过 L7</b>：绕过 gate、不授予新权限，只受既有 Mandate 约束。</p>
+  </div>
+  <div class="hops">
+    <div class="hop auto">
+      <div class="hop-idx">L8</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">信道面</span><span class="hop-act">PR 下又有人评论 / 作者追问</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>同一 Thread 的新 Trigger</div>
+        <div class="hop-ret"><b>返回 ↑</b>无（不该惊动 Router）</div>
+      </div>
+    </div>
+    <div class="arrow"><span>Intake 按 Thread 扇出到所有订阅 Ticket</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L5</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">调度内核</span><span class="hop-act">receive()：扇出 ≠ 评估</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>Input{kind:'trigger'} 投给该 Ticket</div>
+        <div class="hop-ret"><b>返回 ↑</b>只有「没有 owner」的 Trigger 才排队 Eval</div>
+      </div>
+    </div>
+    <div class="arrow"><span>人的消息可唤醒 ended 工单；bot/CI 不能</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L6</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Worker</span><span class="hop-act">在下次 step 就收到新消息</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>Input 卡片（≤600 字 + replies_to）</div>
+        <div class="hop-ret"><b>返回 ↑</b>自决：在范围内就干，越界就 handback</div>
+      </div>
+    </div>
+    <div class="hop">
+      <div class="hop-idx">L4~L1</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">执行</span><span class="hop-act">同一 Session 继续，不新建</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>本步 messages 里带上新输入</div>
+        <div class="hop-ret"><b>返回 ↑</b>Report；Router 只收到一条 follow_up 通知</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- path 4 -->
+<section class="path" id="path-4">
+  <div class="path-head">
+    <span class="path-no">链路 4 · 越界交回</span>
+    <h3>Worker 说「这不该我干」</h3>
+    <p class="path-sub">5 跳。它把「分派的错」变成一次新的准入，而不是硬干或沉默。</p>
+  </div>
+  <div class="hops">
+    <div class="hop auto">
+      <div class="hop-idx">L6</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Worker</span><span class="hop-act">orchestrator_trigger_handback</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>triggerId + reason（进 candidate）</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>{queued: false}</code>：另有主人则不入队</div>
+      </div>
+    </div>
+    <div class="arrow"><span>一个 Trigger 只能被交回一次；Subscription 保留</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L5</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">调度内核</span><span class="hop-act">handback() 记 disposition</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>等「没有其他 Ticket 拥有它」再排新 Eval</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>trigger.requeued</code> 事件</div>
+      </div>
+    </div>
+    <div class="arrow"><span>回到准入层，用同一条 gate 重新判</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L7</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">事件准入</span><span class="hop-act">按普通消息重判（candidate 带交回理由）</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>交回理由进 candidate 卡</div>
+        <div class="hop-ret"><b>返回 ↑</b>accept / attach 到别的工单 / ignore</div>
+      </div>
+    </div>
+    <div class="hop auto">
+      <div class="hop-idx">L6</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Router</span><span class="hop-act">重新分派（禁止 attach 回原工单）</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>新的 Assignment 或 attach 指令</div>
+        <div class="hop-ret"><b>返回 ↑</b>路由结果</div>
+      </div>
+    </div>
+    <div class="hop">
+      <div class="hop-idx">L5</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">调度内核</span><span class="hop-act">新 Assignment 起在目标工单</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>effect: launch / delivery</div>
+        <div class="hop-ret"><b>返回 ↑</b><code>assignment.started</code></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- path 5 -->
+<section class="path" id="path-5">
+  <div class="path-head">
+    <span class="path-no">链路 5 · 崩溃恢复</span>
+    <h3>进程被杀之后，它怎么接上</h3>
+    <p class="path-sub">4 跳。<b>「先落库后执行」在这一刻兑现价值</b>：不重发消息、不丢工单。</p>
+  </div>
+  <div class="hops">
+    <div class="hop">
+      <div class="hop-idx">L1</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">运行时</span><span class="hop-act">进程被杀 / 机器重启</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>无（此刻只有磁盘上的状态）</div>
+        <div class="hop-ret"><b>返回 ↑</b>会话日志 + SQLite 里已提交的事实</div>
+      </div>
+    </div>
+    <div class="arrow"><span>启动：拿目录锁（防双进程）→ 打开 Store → 起 Runtime</span></div>
+    <div class="hop auto">
+      <div class="hop-idx">L5</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">调度内核</span><span class="hop-act">恢复未完成工作</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>运行中的 Assignment 标 <code>assignmentInterrupted</code>；最旧工单优先</div>
+        <div class="hop-ret"><b>返回 ↑</b>未投递的 Input 重新投递（副本去重）</div>
+      </div>
+    </div>
+    <div class="hop auto">
+      <div class="hop-idx">L6</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">Router / Worker</span><span class="hop-act">同一 Session / 目录 / 分支 / PR 上重建</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>recovery note：先核对目录、git 历史、GitHub，再重做外部动作</div>
+        <div class="hop-ret"><b>返回 ↑</b>新的 Report（不会重复开 PR）</div>
+      </div>
+    </div>
+    <div class="hop terminal">
+      <div class="hop-idx">L4+</div>
+      <div class="hop-body">
+        <div class="hop-top"><span class="hop-name">继续跑</span><span class="hop-act">turn 接着排空，未读消息在下一 step 被吃进来</span></div>
+        <div class="hop-pass"><b>传递 ↓</b>messages（从日志重建）</div>
+        <div class="hop-ret"><b>返回 ↑</b>正常结果交付</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONTRACTS ============ -->
+<h2 id="contracts"><span class="num">03</span>边界契约：每一跳到底传什么</h2>
+<p class="lead">
+  这一节是「接口表」。判断一个实现是否符合这套架构，最快的办法是看它的边界是否守住了这几条<b>形状 + 语义</b>。
+</p>
+
+<div class="tablewrap">
+<table>
+<thead>
+<tr><th>边界</th><th>载荷</th><th>生产者 → 消费者</th><th>幂等 / 失败语义</th></tr>
+</thead>
+<tbody>
+<tr><td class="lno">L8→L5</td><td><code>Trigger</code>（不可变，内容派生 id）</td><td>Source → Engine</td><td>同 id 二次到达 = <code>duplicate</code>；未收听 = <code>filtered</code></td></tr>
+<tr><td class="lno">L7→L6</td><td><code>candidate</code> 卡 + <code>Decision</code></td><td>MasterAssessor → Router</td><td>候选有超时；未送达 Router 前不计时</td></tr>
+<tr><td class="lno">L6→L7</td><td><code>orchestrator_route</code>：1–20 条决定</td><td>Router → Engine</td><td>逐条独立执行，单条被拒不阻塞整批</td></tr>
+<tr><td class="lno">L7→L5</td><td><code>Decision</code> + <code>Mandate</code></td><td>Eval → Engine</td><td>accept 按 trigger id 幂等；Mandate 不可变</td></tr>
+<tr><td class="lno">L5→L6</td><td>派工消息（标题 + ≤1500 字 + 卡 + ≤30 词备注）</td><td>DshExecutor → Worker Session</td><td>launch 失败 → 工单失败（瞬时失败重试 3 次）</td></tr>
+<tr><td class="lno">L6→L5</td><td><code>Report</code> / <code>Attention</code> / <code>handback</code></td><td>Worker → Engine</td><td>Report 幂等；handback 每个 Trigger 只一次</td></tr>
+<tr><td class="lno">L5→L6</td><td><code>Input</code>{trigger / policy-changed / resume / text / note}</td><td>Engine → Worker</td><td>投递失败 <code>person/delivery</code> 阶段可见，重试到成功</td></tr>
+<tr><td class="lno">L5→L8</td><td><code>reply</code>（回执 / 回答 / 结果 / attention）</td><td>Outbox → Channel</td><td>同工单同会话保序；3 次失败成系统问题</td></tr>
+<tr><td class="lno">L6→L4</td><td>messages + 工具 schema + 模型选择</td><td>Sessions → agent-loop</td><td>请求冻结不可变；取消则都不提交</td></tr>
+<tr><td class="lno">L4→L3</td><td><code>tool/call</code> → args（schema 校验）</td><td>agent-loop → tools</td><td>先记录后执行；denied 与失败同形</td></tr>
+<tr><td class="lno">L3→L2</td><td>能力调用（<code>ctx.*</code> 方法）</td><td>tool body → seam</td><td>注册可逆；错误按可恢复性分类</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 style="margin-top:34px">四个「形状」值得背下来</h3>
+<div class="rules">
+  <div class="rule"><b>① 下传永远是「意图 + 依据」</b><span>Trigger 带 actor 与地址，Assignment 带源 Trigger 卡，tool/call 带 args。上层不替下层做实现，只给意图和判断依据。</span><em>反例：Router 替 Worker 写实现计划</em></div>
+  <div class="rule"><b>② 返回永远是「事实 + 状态」</b><span>Report 是状态机值不是自由文本，tool/result 带 isError，Decision 带原因码。自由文本不能驱动控制流。</span><em>反例：从 Report 正文推断「在等人」</em></div>
+  <div class="rule"><b>③ 授权与上下文走不同通道</b><span>Subscription 直通只给上下文、不给权限；Mandate 只由 accept/stop/revalidate 改变。</span><em>反例：让「订阅到消息」等于「有权干活」</em></div>
+  <div class="rule"><b>④ 一切可观察的都要先落库</b><span>tool/call、Trigger、effect、outbox 回执都先记录再执行；崩溃后能靠日志重建。</span><em>反例：先发消息再记账</em></div>
+</div>
+
+<!-- ============ RULES ============ -->
+<h2 id="rules"><span class="num">04</span>八条不变量：分层能不能立住看这些</h2>
+<p class="lead">与实现语言无关。换一套代码重写，这些仍然应该成立；破了其中任何一条，分层就会退化成「一堆互相调用的模块」。</p>
+<div class="rules">
+  <div class="rule"><b>1 · 会话日志是唯一真源</b><span>「模型可见即已记录」：每个模型请求都能从日志重建；压缩只隐藏被取代条目，不删除历史。</span><em>DSH · packages/core/session</em></div>
+  <div class="rule"><b>2 · 每类状态只有一个写者</b><span>Trigger/Ticket/Assignment 只由 Engine 写；回执只由 Outbox 写；健康条目各由唯一 claim 者写。</span><em>原型 · docs/007-architecture.md:261-271</em></div>
+  <div class="rule"><b>3 · 先落库后执行</b><span>命令在事务内入队 effect，提交后才动外部世界；回滚则绝不产生副作用。</span><em>原型 · src/app/effects.ts</em></div>
+  <div class="rule"><b>4 · 幂等由内容派生</b><span>Trigger id = sha256(内容)；accept 按 trigger id 幂等；effect 同 kind/key 只有一行。</span><em>原型 · src/core/ids.ts</em></div>
+  <div class="rule"><b>5 · 授权不可伪造</b><span>Mandate 只有三变；Executor 不能宣称「有人让它停」；stop 必须由 Eval 或面板判定。</span><em>原型 · docs/002-authorization.md:129</em></div>
+  <div class="rule"><b>6 · 订阅直通不授权</b><span>后续事件绕过 gate，但只受既有 Mandate 约束；上下文与权限走不同通道。</span><em>原型 · docs/002-authorization.md:20-22</em></div>
+  <div class="rule"><b>7 · 越界必交回，不硬顶</b><span>Worker 判断超出 Ticket 范围就 handback，等没有 owner 时回 Eval 重新分派。</span><em>原型 · docs/007-architecture.md:91</em></div>
+  <div class="rule"><b>8 · 注册是可逆副作用</b><span>工具、提示词段、适配器、监听器都带 disposer；卸载插件即撤销，不留「删不掉的内核补丁」。</span><em>DSH · docs/cordis-primer.zh.md</em></div>
+</div>
+
+<!-- ============ STATUS ============ -->
+<h2 id="status"><span class="num">05</span>落地度：文章说的，代码里做了没有</h2>
+<p class="lead">
+  这一节防止把「设计探索」当成「框架能力」。五模块 + 实验数字逐条核验（详见同目录 markdown 笔记）。
+</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>设计</th><th>落在哪一层</th><th>状态</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>双层架构 Router / Worker</td><td class="lno"><a href="#l6">L6</a></td><td><span class="pill ok">有实现</span></td><td>常驻 main Session + 每 Ticket 一 Session/目录</td></tr>
+<tr><td>事件驱动 · 两级过滤</td><td class="lno"><a href="#l7">L7</a></td><td><span class="pill ok">有实现</span></td><td><code>policy.gate()</code> + MasterAssessor</td></tr>
+<tr><td>事件驱动 · 订阅直通</td><td class="lno"><a href="#l5">L5</a></td><td><span class="pill ok">有实现</span></td><td>Intake 按 Thread 扇出，绕开 Router</td></tr>
+<tr><td>异步多信道交互</td><td class="lno"><a href="#l8">L8</a></td><td><span class="pill ok">有实现</span></td><td>durable outbox + 100 词硬限</td></tr>
+<tr><td>Inline &amp; Spill / 链式召回</td><td class="lno">L5·L6</td><td><span class="pill part">部分实现</span></td><td>只有字符预算 + 续读指针 + 资源引用图，无预算管理器</td></tr>
+<tr><td>存算分离（云端常驻 / 跨设备）</td><td class="lno">L5·L1</td><td><span class="pill part">部分实现</span></td><td>只做到「进程内 loop ⊥ SQLite」，单机 tmux</td></tr>
+<tr><td>投机执行</td><td class="lno"><a href="#l6">L6</a></td><td><span class="pill no">未实现</span></td><td>代码里没有；最接近的是 observe 只记录</td></tr>
+<tr><td>外部 Watchdog Session</td><td class="lno"><a href="#l6">L6</a></td><td><span class="pill no">未实现</span></td><td>替代物是健康板 + 外部 cron 巡检</td></tr>
+<tr><td>文章第 7 节实验数字</td><td class="lno">—</td><td><span class="pill no">不在仓库</span></td><td>无基准负载 / 脚本 / 数据，无法核对</td></tr>
+</tbody>
+</table>
+</div>
+
+<footer>
+  <p>
+    <b>来源</b>：公众号《Super-agent 设计探索：迈向更自主的 Agent 系统》（2026-10-31，微信原文被验证码拦截，正文经
+    <a href="https://www.zhidx.com/p/606311.html">智东西转载</a>）；
+    <a href="https://github.com/deepseek-ai/deepseek-harness">deepseek-ai/deepseek-harness</a>（MIT，372 包）；
+    <a href="https://github.com/deepseek-ai/dsh-superagent-prototype">deepseek-ai/dsh-superagent-prototype</a>（MIT，研究原型）；
+    本机 Desktop 0.2.1-rc.5 运行时抽查。
+  </p>
+  <p class="small">
+    事实均带 <code>docs/*.md</code> 或 <code>src/*.ts</code> 锚点，可在同目录 markdown 笔记
+    <a href="DeepSeek-Agent-架构.md">DeepSeek-Agent-架构.md</a> 与 <a href="_research/superagent-prototype.md">_research/superagent-prototype.md</a> 等底稿中复核。
+    「设计取舍 / 读法 / 链条走向」是分析结论，不是官方原文。
+  </p>
+  <p class="small">想要会动的版本？看 <a href="DeepSeek-Agent-架构动画.html">DeepSeek-Agent-架构动画.html</a>（数据包逐层流动）。</p>
+  <p class="small">想要横版方框架构图？看 <a href="DeepSeek-Agent-架构图.html">DeepSeek-Agent-架构图.html</a>（分组+虚线箭头+光点流动）。</p>
+  <p class="small">生成于 2026-11-02 · 单文件、无外部依赖、支持浅色/深色、可直接打印为 PDF。</p>
+</footer>
+
+</main>
+
+<button class="totop" id="totop" type="button" title="回到顶部">↑</button>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn'),
+      prog=document.getElementById('progress'), top=document.getElementById('totop'),
+      order=['auto','light','dark'], label={auto:'🌗 主题：跟随系统',light:'☀️ 主题：浅色',dark:'🌙 主题：深色'};
+
+  function apply(t){
+    root.setAttribute('data-theme',t);
+    if(btn) btn.textContent=label[t]||label.auto;
+    try{localStorage.setItem('dsh-arch-theme',t)}catch(e){}
+  }
+  var saved='auto';
+  try{saved=localStorage.getItem('dsh-arch-theme')||'auto'}catch(e){}
+  apply(order.indexOf(saved)>=0?saved:'auto');
+
+  if(btn) btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')||'auto';
+    apply(order[(order.indexOf(cur)+1)%order.length]);
+  });
+  var pb=document.getElementById('printBtn');
+  if(pb) pb.addEventListener('click',function(){window.print()});
+
+  function onScroll(){
+    var h=document.documentElement, max=h.scrollHeight-h.clientHeight,
+        y=h.scrollTop||document.body.scrollTop, p=max>0?(y/max*100):0;
+    if(prog) prog.style.width=p+'%';
+    if(top) top.classList.toggle('show', y>600);
+  }
+  window.addEventListener('scroll',onScroll,{passive:true});
+  onScroll();
+  if(top) top.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});
+
+  // 打印前展开所有载荷，避免 PDF 丢内容
+  window.addEventListener('beforeprint',function(){
+    var d=document.querySelectorAll('details'); for(var i=0;i<d.length;i++) d[i].open=true;
+  });
+})();
+</script>
+</body>
+</html>

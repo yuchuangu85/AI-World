@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>DeepSeek Agent 架构图 · 层间数据流动</title>
+<style>
+:root{
+  --bg:#fbfaf7; --bg-soft:#fff; --bg-alt:#f4f1e9; --bg-inset:#f8f6f0; --bg-strip:#f6f3ec;
+  --fg:#1b1a17; --fg-2:#413e38; --fg-3:#736d62;
+  --line:#e2ddd1; --line-2:#efeae0;
+  --req:#2f5ce0; --ret:#0f8a6a; --cfg:#b07414; --both:#6b7280;
+  --auto:#2f5ce0; --auto-bg:#eef2ff;
+  --base:#0f8a6a; --base-bg:#e9f7f2;
+  --obs:#b07414;  --obs-bg:#fbf2e2;
+  --shadow:0 1px 2px rgba(27,26,23,.05), 0 8px 24px rgba(27,26,23,.05);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root[data-theme="auto"]{
+    --bg:#111317; --bg-soft:#171a1f; --bg-alt:#1b1f25; --bg-inset:#15181d; --bg-strip:#14171b;
+    --fg:#e9e6e0; --fg-2:#b6b0a5; --fg-3:#8a8478;
+    --line:#2a2e35; --line-2:#21252b;
+    --req:#8fa6ff; --ret:#4fd1a8; --cfg:#e0ab52; --both:#8b93a1;
+    --auto:#8fa6ff; --auto-bg:#1a2235;
+    --base:#4fd1a8; --base-bg:#13271f;
+    --obs:#e0ab52;  --obs-bg:#2a2318;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111317; --bg-soft:#171a1f; --bg-alt:#1b1f25; --bg-inset:#15181d; --bg-strip:#14171b;
+  --fg:#e9e6e0; --fg-2:#b6b0a5; --fg-3:#8a8478;
+  --line:#2a2e35; --line-2:#21252b;
+  --req:#8fa6ff; --ret:#4fd1a8; --cfg:#e0ab52; --both:#8b93a1;
+  --auto:#8fa6ff; --auto-bg:#1a2235;
+  --base:#4fd1a8; --base-bg:#13271f;
+  --obs:#e0ab52;  --obs-bg:#2a2318;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+code{font-family:var(--mono)}
+a{color:var(--req);text-decoration:none}
+
+.top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:10px;padding:9px 18px;
+  border-bottom:1px solid var(--line-2);background:var(--bg);
+  background:color-mix(in srgb,var(--bg) 92%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.top .bm{width:22px;height:22px;border-radius:6px;background:linear-gradient(140deg,var(--auto),var(--base));position:relative;flex:0 0 auto}
+.top .bm::after{content:"";position:absolute;inset:5px;border-radius:2px;background:var(--bg)}
+.top b{font-size:13px;font-weight:650;color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .sp{margin-left:auto;display:flex;gap:6px}
+.gh{height:29px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg-soft);
+  color:var(--fg-2);cursor:pointer;font-size:12px;font-family:inherit}
+.gh:hover{color:var(--fg);border-color:var(--fg-3)}
+
+.wrap{max-width:1460px;margin:0 auto;padding:18px 18px 34px}
+.hd{margin:4px 0 12px}
+.hd h1{font-size:clamp(19px,2.3vw,26px);margin:0 0 6px;letter-spacing:-.01em;line-height:1.3}
+.hd h1 em{font-style:normal;background:linear-gradient(100deg,var(--req),var(--ret));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hd p{margin:0;color:var(--fg-2);font-size:13.5px;max-width:110ch}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.chips span{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--bg-soft);color:var(--fg-2)}
+.chips b{color:var(--fg)}
+
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 10px}
+.btn{height:33px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg-soft);
+  color:var(--fg);cursor:pointer;font-size:12.5px;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:.15s}
+.btn:hover{border-color:var(--fg-3)}
+.btn.on{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:640}
+.btn.pri{background:var(--req);color:#fff;border-color:var(--req);font-weight:640;min-width:92px;justify-content:center}
+.btn.pri:hover{filter:brightness(1.06)}
+.sep{width:1px;height:22px;background:var(--line)}
+.step{font-family:var(--mono);font-size:11.5px;color:var(--fg-3);margin-left:auto;white-space:nowrap}
+
+/* ---------- stage ---------- */
+.stage{position:relative;width:100%;overflow:hidden;border:1px solid var(--line);border-radius:16px;
+  background:radial-gradient(circle at 20% 0%,var(--auto-bg),transparent 42%),
+             radial-gradient(circle at 85% 100%,var(--base-bg),transparent 45%),var(--bg-soft);
+  box-shadow:var(--shadow)}
+.canvas{position:absolute;left:0;top:0;width:1400px;height:650px;transform-origin:0 0}
+svg#wires{position:absolute;inset:0;width:1400px;height:650px;overflow:visible}
+.wire{fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;transition:stroke-width .18s,opacity .18s}
+.wire.k-req{stroke:var(--req);stroke-dasharray:6 5}
+.wire.k-ret{stroke:var(--ret);stroke-dasharray:2 5;stroke-width:1.9}
+.wire.k-cfg{stroke:var(--cfg);stroke-dasharray:1.5 4;stroke-width:1.4;opacity:.85}
+.wire.k-both{stroke:var(--both);stroke-dasharray:5 4;stroke-width:1.4;opacity:.8}
+.wire.thin{stroke-width:1.3;opacity:.6}
+.wire.lit{stroke-width:3;opacity:1;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--fg) 22%,transparent))}
+.wire.dim{opacity:.18}
+.hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer}
+.tok{pointer-events:none}
+.tok circle.h{opacity:.16}
+.tok circle.b{filter:drop-shadow(0 1px 2px rgba(0,0,0,.25))}
+.tok.t-req circle{fill:var(--req)} .tok.t-ret circle{fill:var(--ret)}
+.tok.t-cfg circle{fill:var(--cfg)} .tok.t-both circle{fill:var(--both)}
+.tok.big circle.b{r:7} .tok.big circle.h{r:12;opacity:.22}
+.tok.hide{display:none}
+
+/* groups */
+.grp{position:absolute;border:1.5px dashed var(--line);border-radius:15px}
+.grp.auto{background:color-mix(in srgb,var(--auto) 5%,transparent)}
+.grp.base{background:color-mix(in srgb,var(--base) 5%,transparent)}
+.grp.obs{background:color-mix(in srgb,var(--obs) 6%,transparent)}
+.grp .leg{position:absolute;top:-9px;left:13px;padding:0 7px;background:var(--bg-soft);
+  font-size:10.5px;font-weight:700;letter-spacing:.02em;color:var(--fg-2);border-radius:4px}
+.grp.obs .leg{color:var(--obs)}
+.grp.lit{border-color:var(--req);border-style:solid}
+
+/* nodes */
+.node{position:absolute;border-radius:10px;border:1px solid var(--line);background:var(--bg-soft);
+  padding:7px 9px;display:flex;flex-direction:column;justify-content:center;
+  box-shadow:0 1px 2px rgba(27,26,23,.05);transition:border-color .18s,box-shadow .18s,transform .18s;
+  cursor:pointer;overflow:hidden}
+.node .t{font-size:12px;font-weight:650;line-height:1.22;letter-spacing:-.005em}
+.node .s{font-size:10px;color:var(--fg-3);margin-top:2px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
+.node.k-input::before,.node.k-output::before{background:var(--auto)}
+.node.k-gate::before{background:var(--auto)}
+.node.k-agent::before{background:var(--auto)}
+.node.k-kernel::before{background:var(--auto)}
+.node.k-loop::before{background:linear-gradient(180deg,var(--req),var(--ret))}
+.node.k-tool::before{background:var(--base)}
+.node.k-seam::before{background:var(--base)}
+.node.k-runtime::before{background:var(--base)}
+.node.k-obs::before{background:var(--obs)}
+.node.k-chip{padding:4px 9px;flex-direction:row;align-items:center;gap:6px;background:var(--bg-alt);border-style:dashed}
+.node.k-chip .t{font-size:10.5px;font-weight:600;color:var(--fg-2)}
+.node.k-loop{background:linear-gradient(160deg,var(--auto-bg),var(--base-bg));border-color:color-mix(in srgb,var(--req) 24%,var(--line))}
+.node.k-loop .t{font-size:14.5px}
+.node.k-loop .s{font-size:10.5px;white-space:normal}
+.node:hover{border-color:var(--req);box-shadow:0 4px 14px rgba(47,92,224,.14)}
+.node.lit{border-color:var(--req);box-shadow:0 0 0 3px color-mix(in srgb,var(--req) 16%,transparent)}
+.node.sel{border-color:var(--req);box-shadow:0 0 0 3px color-mix(in srgb,var(--req) 22%,transparent)}
+
+/* labels */
+.lbl{position:absolute;transform:translate(-50%,-50%);font-size:10px;line-height:1.2;padding:2px 6px;
+  border-radius:6px;background:var(--bg-soft);border:1px solid var(--line);color:var(--fg-2);
+  white-space:nowrap;pointer-events:none;box-shadow:0 1px 2px rgba(27,26,23,.06);font-family:var(--mono)}
+.lbl.k-req{border-color:color-mix(in srgb,var(--req) 30%,var(--line));color:var(--req)}
+.lbl.k-ret{border-color:color-mix(in srgb,var(--ret) 30%,var(--line));color:var(--ret)}
+.lbl.k-cfg{border-color:color-mix(in srgb,var(--cfg) 30%,var(--line));color:var(--cfg)}
+
+/* panel */
+.panel{display:grid;grid-template-columns:190px minmax(0,1fr) 300px;gap:0;margin-top:12px;
+  border:1px solid var(--line);border-radius:14px;background:var(--bg-soft);box-shadow:var(--shadow);overflow:hidden}
+.panel .who{padding:12px 14px;border-right:1px solid var(--line-2);background:var(--bg-inset)}
+.panel .who .k{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);font-weight:700}
+.panel .who .n{font-size:14px;font-weight:670;margin-top:3px;line-height:1.3}
+.panel .who .g{font-size:10.5px;color:var(--fg-3);margin-top:3px;font-family:var(--mono)}
+.panel .flow{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;border-right:1px solid var(--line-2)}
+.panel h5{margin:0 0 3px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;color:var(--fg-3)}
+.panel .p h5{color:var(--req)} .panel .r h5{color:var(--ret)} .panel .w h5{color:var(--obs)}
+.panel p{margin:0;font-size:12.5px;line-height:1.5}
+.panel .why{padding:12px 14px}
+.panel .why p{color:var(--fg-2)}
+
+.legend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;font-size:11.5px;color:var(--fg-3)}
+.legend i{display:inline-block;width:20px;height:0;border-top:2px dashed;vertical-align:middle;margin-right:5px}
+.legend .rq i{border-color:var(--req)} .legend .rt i{border-color:var(--ret)}
+.legend .cf i{border-color:var(--cfg)} .legend .bo i{border-color:var(--both)}
+footer{margin-top:22px;padding-top:14px;border-top:1px solid var(--line-2);font-size:12px;color:var(--fg-3)}
+footer a{color:var(--fg-2);text-decoration:underline;text-decoration-color:var(--line)}
+@media (max-width:1100px){
+  .panel{grid-template-columns:1fr}
+  .panel .who,.panel .flow{border-right:0;border-bottom:1px solid var(--line-2)}
+  .panel .flow{grid-template-columns:1fr}
+}
+@media print{.top,.bar,.legend{display:none!important} .tok{display:none!important} .stage,.panel{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="bm"></div><b>DeepSeek Agent 架构图 · 层间数据流动</b>
+  <div class="sp"><button class="gh" id="themeBtn" type="button">🌗 主题</button></div>
+</div>
+
+<div class="wrap">
+  <div class="hd">
+    <h1>八层架构，一张图看：<em>谁把什么传给谁，又返回什么</em></h1>
+    <p>方框是组件，虚线框是层，带箭头的虚线是数据流（蓝＝请求 · 绿＝响应 · 琥珀＝配置/状态 · 灰＝双向）。
+       把鼠标移到任意方框或箭头上看这一跳的「传递 / 返回 / 原理」，或点上方按钮播放链路演示。</p>
+    <div class="chips">
+      <span><b>8</b> 层</span><span><b id="cNodes">26</b> 组件</span><span><b id="cEdges">19</b> 条数据流</span><span><b id="cGrps">9</b> 个分组</span>
+      <span>来源：DSH + Super-agent 公开资料与本机运行时抽查</span>
+    </div>
+  </div>
+
+  <div class="bar">
+    <button class="btn pri" id="playBtn" type="button">▶ 播放演示</button>
+    <button class="btn" id="resetBtn" type="button">⟲ 重播</button>
+    <div class="sep"></div>
+    <button class="btn on" id="sc1" type="button">① 请求链</button>
+    <button class="btn" id="sc2" type="button">② 响应链</button>
+    <button class="btn" id="sc3" type="button">③ 全览流动</button>
+    <div class="sep"></div>
+    <button class="btn" id="speedBtn" type="button">1×</button>
+    <span class="step" id="stepTxt">待机 · 点击任意对象查看</span>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="canvas" id="canvas">
+      <svg id="wires" width="1400" height="650" viewBox="0 0 1400 650"></svg>
+      <div id="grps"></div>
+      <div id="nodes"></div>
+      <div id="lbls"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel">
+    <div class="who"><div class="k">当前对象</div><div class="n" id="pName">整张图</div><div class="g" id="pMeta">把鼠标移到方框/箭头上</div></div>
+    <div class="flow">
+      <div class="p"><h5>↓ 传递</h5><p id="pPass">选中一个组件或一条数据流</p></div>
+      <div class="r"><h5>↑ 返回</h5><p id="pRet">就能看到这一跳的载荷</p></div>
+    </div>
+    <div class="why"><h5>原理</h5><p id="pWhy">图的读法：左侧是「人怎么进来」，中间是「谁来做」，右侧是「在哪里真的执行」，绿色回流是「结果怎么回去」。</p></div>
+  </div>
+
+  <div class="legend">
+    <span class="rq"><i></i>请求（向下/向右）</span>
+    <span class="rt"><i></i>响应（回流）</span>
+    <span class="cf"><i></i>配置 / 状态</span>
+    <span class="bo"><i></i>双向</span>
+    <span>· 光点＝在传的数据包，方向即流向</span>
+  </div>
+
+  <footer>
+    同源材料：<a href="DeepSeek-Agent-架构动画.html">逐层动画版</a>、<a href="DeepSeek-Agent-架构.html">静态可视化</a>、
+    <a href="DeepSeek-Agent-架构.md">架构笔记（带源码锚点）</a>。
+    图为教学简化：真实系统中多个 Worker 并发、多个事件交错；「Watchdog」为文章设计，原型的替代物是外部 cron 巡检。生成于 2026-11-02。
+  </footer>
+</div>
+
+<script id="map-data" type="application/json">{"W":1400,"H":650,"GROUPS":[{"id":"g1","t":"L8 · 信道与人机面","x":20,"y":36,"w":320,"h":168,"tone":"auto"},{"id":"g2","t":"L7 · 事件准入","x":356,"y":36,"w":540,"h":168,"tone":"auto"},{"id":"g3","t":"L6 · 自治调度","x":916,"y":36,"w":464,"h":168,"tone":"auto"},{"id":"g4","t":"L5 · 领域与调度内核","x":20,"y":232,"w":400,"h":184,"tone":"auto"},{"id":"g5","t":"L4 · Agent 内核","x":436,"y":232,"w":320,"h":184,"tone":"auto"},{"id":"g6","t":"L3 · 工具执行","x":772,"y":232,"w":300,"h":184,"tone":"base"},{"id":"g7","t":"L2 · 能力 seam","x":1088,"y":232,"w":292,"h":184,"tone":"base"},{"id":"g8","t":"横切 · 可靠性与观测","x":20,"y":436,"w":400,"h":180,"tone":"obs"},{"id":"g9","t":"L1 · 运行时与外部世界","x":436,"y":436,"w":944,"h":180,"tone":"base"}],"NODES":[{"id":"src","g":"g1","t":"Source","s":"IM · GitHub · CI","x":178,"y":88,"w":146,"h":64,"k":"input","info":{"role":"把外部事件归一成不可变 Trigger","inp":"群消息 / PR 评论 / CI 结果","out":"Trigger{id, human, addressed, threads}"}},{"id":"chan","g":"g1","t":"Channel","s":"回写 IM / PR","x":36,"y":88,"w":130,"h":64,"k":"output","info":{"role":"结果按信道习惯写回","inp":"reply 消息（回执/回答/结果/attention）","out":"sent / gone / waiting"}},{"id":"pol","g":"g2","t":"Policy 版本 · 准入表 · accept mode","x":376,"y":56,"w":506,"h":24,"k":"chip","info":{"role":"授权规则与其版本","inp":"规则 / 白名单 / 准入表 / bot 名单","out":"policyVersion（hash）"}},{"id":"gate","g":"g2","t":"gate 确定性快筛","s":"名单 · 点名 · 准入表","x":376,"y":96,"w":140,"h":64,"k":"gate","info":{"role":"不花模型钱的准入判定","inp":"Trigger + Thread + Policy","out":"strength=explicit|inferred|拒绝码"}},{"id":"assess","g":"g2","t":"assessment 模型研判","s":"规则覆盖 · 方向 · 证据","x":546,"y":96,"w":140,"h":64,"k":"gate","info":{"role":"判「值不值得开工、干多大」","inp":"Trigger 批 + Thread 快照 + 全部 Ticket","out":"candidate 卡 + 判定理由"}},{"id":"mand","g":"g2","t":"Mandate 授权单","s":"不可变 · 三变","x":716,"y":96,"w":160,"h":64,"k":"gate","info":{"role":"授权的可审计凭据","inp":"accept 决定","out":"policyVersion + scope + strength + basis"}},{"id":"router","g":"g3","t":"Router 常驻","s":"只分派 · 不干活","x":936,"y":96,"w":190,"h":64,"k":"agent","info":{"role":"全局连续性 + 统一对外","inp":"candidate 卡 / Report / follow_up","out":"orchestrator_route（1–20 条决定）"}},{"id":"worker","g":"g3","t":"Worker ×N","s":"一 Ticket 一 Session+目录","x":1152,"y":96,"w":212,"h":64,"k":"agent","info":{"role":"隔离执行，只汇报不抢话","inp":"派工消息 + Input","out":"Report / Attention / handback"}},{"id":"engine","g":"g4","t":"Engine 单写者","s":"同步 · 单事务","x":36,"y":268,"w":170,"h":52,"k":"kernel","info":{"role":"唯一能改领域状态的地方","inp":"命令（decide / report / reply…）","out":"DomainEvents + 事务结果"}},{"id":"effects","g":"g4","t":"Effects 持久队列","s":"先落库后执行","x":222,"y":268,"w":180,"h":52,"k":"kernel","info":{"role":"崩溃可恢复的副作用","inp":"kind/key/payload","out":"launch · delivery · relay · reply"}},{"id":"outbox","g":"g4","t":"Outbox 回执","s":"同事务 · 不重不漏","x":36,"y":336,"w":170,"h":52,"k":"kernel","info":{"role":"对外消息的唯一写者","inp":"reply 意图","out":"sent / dropped + 回执记录"}},{"id":"store","g":"g4","t":"Store · SQLite","s":"9 张表 · 生成列索引","x":222,"y":336,"w":180,"h":52,"k":"kernel","info":{"role":"领域事实的持久化","inp":"事务提交","out":"活跃工作集（每轮只读活跃）"}},{"id":"turn","g":"g5","t":"turn / step 内核","s":"组装 → 请求 → 工具 → 再请求","x":456,"y":268,"w":280,"h":116,"k":"loop","info":{"role":"一次输入排空成若干「模型请求+工具」","inp":"messages + 工具 schema + 模型选择","out":"assistant/message + tool/result + usage"}},{"id":"pre","g":"g6","t":"pre-execute","s":"hook · 权限 · 沙箱","x":792,"y":296,"w":260,"h":48,"k":"tool","info":{"role":"策略与安全插点","inp":"tool/call + args","out":"allow / deny / ask"}},{"id":"exec","g":"g6","t":"execute → post","s":"超时 · 重试 · 结果改写","x":792,"y":362,"w":260,"h":48,"k":"tool","info":{"role":"真正执行并归一结果","inp":"审批后的调用","out":"tool/result{content, isError}"}},{"id":"llm","g":"g7","t":"ctx.llm","s":"模型适配","x":1104,"y":296,"w":120,"h":48,"k":"seam","info":{"role":"模型流式 seam","inp":"请求体","out":"StreamChunk + usage"}},{"id":"shell","g":"g7","t":"ctx.shell / fs","s":"命令 · 文件","x":1236,"y":296,"w":128,"h":48,"k":"seam","info":{"role":"执行与文件能力","inp":"exec / write","out":"退出码 / 写入结果"}},{"id":"sbx","g":"g7","t":"ctx.sandbox","s":"只读/工作区/完全","x":1104,"y":362,"w":120,"h":48,"k":"seam","info":{"role":"沙箱策略 seam","inp":"权限模式","out":"放行 / 拒绝码"}},{"id":"skl","g":"g7","t":"ctx.skills / MCP","s":"技能 · 外部资源","x":1236,"y":362,"w":128,"h":48,"k":"seam","info":{"role":"技能与 MCP 资源","inp":"skill / mcp 调用","out":"注入的 user/message 或资源"}},{"id":"health","g":"g8","t":"HealthBoard","s":"每部件一条健康度","x":36,"y":480,"w":170,"h":56,"k":"obs","info":{"role":"机器可判的健康度","inp":"各部件失败计数","out":"健康条目 / 系统问题"}},{"id":"recover","g":"g8","t":"恢复 · recovery note","s":"最旧工单优先","x":222,"y":480,"w":180,"h":56,"k":"obs","info":{"role":"崩溃后不重复劳动","inp":"assignmentInterrupted","out":"同一 Session/目录/分支上重建"}},{"id":"wd","g":"g8","t":"Watchdog Session：文章设计，原型未实现","x":36,"y":556,"w":366,"h":40,"k":"obs","info":{"role":"外部控制回路（设计）","inp":"定时消息","out":"判断进展/方向并介入 —— 原型仅用 cron 巡检替代"}},{"id":"pers","g":"g9","t":"会话日志 · SQLite","s":"不可变代际 vN","x":456,"y":480,"w":296,"h":56,"k":"runtime","info":{"role":"状态与事实的落点","inp":"persist 事务 / 追加","out":"session.vN.jsonl.zst + DB"}},{"id":"tok","g":"g9","t":"模型 API 与预算","s":"token 流 · usage","x":772,"y":480,"w":300,"h":56,"k":"runtime","info":{"role":"真正的推理调用","inp":"HTTP + 鉴权","out":"token 流 / 错误分类"}},{"id":"api","g":"g9","t":"进程与沙箱后端","s":"sandbox-exec · bwrap","x":1094,"y":480,"w":140,"h":56,"k":"runtime","info":{"role":"真实的进程与隔离","inp":"syscall","out":"字节 / 退出码"}},{"id":"proc","g":"g9","t":"网络与凭据","s":"fail-closed","x":1250,"y":480,"w":114,"h":56,"k":"runtime","info":{"role":"外部网络与密钥","inp":"凭据 seam","out":"请求 / 拒绝"}}],"EDGES":[{"id":"e1","p":"Trigger{id, human, addressed, threads}","r":"stored / duplicate（同 id 幂等）","w":"Source 在进入领域前就丢掉 bot 自己的消息；Trigger id 由内容派生，重复到达只认成 duplicate。","from":"src","to":"gate","kind":"req","fromSide":"b","toSide":"b","via":[[251,180],[451,180]],"label":"Trigger · 不可变 · 幂等"},{"id":"e2","p":"Trigger + Thread + Policy","r":"strength = explicit | inferred | 拒绝码","w":"确定性 gate 不花模型钱，先把绝大多数噪音挡在门外。","from":"gate","to":"assess","kind":"req","thin":true},{"id":"e3","p":"候选事件 + 强度","r":"candidate：值不值得开工","w":"只有通过快筛的候选才交给模型研判，模型只看该看的。","from":"assess","to":"mand","kind":"req","thin":true},{"id":"e4","p":"candidate 卡（含评估理由）","r":"orchestrator_route：1–20 条决定","w":"评估结论以消息 steer 进 Router 的轮次，由 Router 真正下单；一次可带多条，单条被拒不阻塞整批。","from":"mand","to":"router","kind":"req","label":"candidate 卡（模型研判）","at":0.5},{"id":"e5","p":"accept 决定 + 标题 + 备注 ≤30 词","r":"路由结果 {results:[…]}","w":"Router 只分派不干活；备注禁止改写需求，原文与源 Trigger 卡一起转交。","from":"router","to":"worker","kind":"req","thin":true,"fromSide":"r","toSide":"l"},{"id":"e6","p":"派工消息：标题 + ≤1500 字任务 + 源卡","r":"assignmentStarted","w":"先落库后执行：effect 在事务内入队、提交后才起 worker；prepare 目录失败则工单失败。","kind":"req","from":"worker","to":"turn","fromAt":[1290,160],"via":[[1290,206],[560,206]],"toAt":[560,268],"label":"派工消息","labelAt":0.52},{"id":"e7","p":"messages + 工具 schema + 模型选择（冻结）","r":"assistant/message（含 tool calls）","w":"请求一旦发出不可变；每个模型可见事实都追加回会话日志，供下一步派生。","from":"turn","to":"pre","kind":"req","label":"tool/call + args","at":0.5},{"id":"e8","p":"tool/call + args（schema 校验后）","r":"allow / deny / ask","w":"tool/call 先进日志再执行；权限、沙箱、审批都插在 pre-execute，不改主循环。","from":"pre","to":"exec","kind":"req","thin":true},{"id":"e9","p":"ctx.* 能力调用","r":"退出码 / 流式 chunk / 分类错误","w":"按 ctx key 查找实现，换沙箱、换 shell 不动上层。","from":"exec","to":"sbx","kind":"req","label":"ctx.* 调用","at":0.5},{"id":"e10","p":"执行副作用请求","r":"tool/result{content, isError}","w":"denied 与失败同形返回，模型无需特殊处理。","from":"exec","to":"tok","kind":"req","label":"执行副作用","at":0.5},{"id":"e11","p":"syscall / HTTP / 文件 IO","r":"bytes / exit code / token 流","w":"只有这一层真的在花钱、改文件；上面七层全是组织方式。","from":"sbx","to":"api","kind":"req","label":"syscall / HTTP","at":0.5},{"id":"e12","p":"assistant/message（含工具结果）","r":"usage / stopReason","w":"turn 是 worker 会话内部的循环：一步结束才进入下一步，新输入在步边界被吃进来。","kind":"ret","from":"turn","to":"worker","fromAt":[640,268],"via":[[640,222],[1220,222]],"toAt":[1220,160],"label":"assistant/message","labelAt":0.52},{"id":"e13","p":"Report{progress|ready|blocked|failed} + Attention","r":"assignmentStarted / ticket.ended","w":"Worker 只汇报不抢话；越界请求用 handback 交回，而不是硬顶或沉默。","from":"worker","to":"engine","kind":"ret","fromSide":"b","toSide":"t","via":[[1300,192],[400,192],[400,250],[121,250]],"label":"Report","labelAt":0.18},{"id":"e14","p":"reply（回执/回答/结果/attention）","r":"sent / dropped + 回执","w":"同工单同会话保序；失败按退避重试，回执保证同一条消息不会发两次。","from":"outbox","to":"chan","kind":"ret","fromSide":"l","toSide":"b","via":[[26,362],[26,180],[101,180]],"label":"reply · 保序"},{"id":"e9r","p":"结果 / 错误（分类后）","r":"tool/result{content, isError}","w":"拒绝与失败同形返回：模型无需区分「被拦」和「报错」，策略统一。","kind":"ret","from":"sbx","to":"exec","fromAt":[1104,376],"toAt":[1052,376]},{"id":"e10r","p":"token 流 / usage / 错误分类","r":"assistant/message 的素材","w":"模型输出先回到工具层归一，再进会话日志；这是一次「事实 → 状态」的转换。","kind":"ret","from":"tok","to":"exec","fromAt":[934,480],"toAt":[934,410]},{"id":"e11r","p":"bytes / exit code","r":"沙箱放行结果","w":"真实执行的结果沿原路回流；沙箱只负责「能不能做」，不解释业务。","kind":"ret","from":"api","to":"sbx","fromAt":[1152,480],"toAt":[1152,410]},{"id":"e15","p":"命令（decide / report / reply…）","r":"effect 行 {kind,key,payload,due}","w":"Engine 是唯一写者：命令同步、单事务，端口在事务内入队、提交后执行。","from":"engine","to":"effects","kind":"both","label":"enqueue","thin":true,"at":0.5},{"id":"e16","p":"reply 意图","r":"Outbox 回执（同事务）","w":"消息「入队」与「回执」在同一个事务里，所以崩溃也不会重复发送。","from":"effects","to":"outbox","kind":"cfg","thin":true}],"SCENES":[{"id":"s1","t":"请求：一件工作怎么进去","steps":[["e1",1],["e2",1],["e3",1],["e4",1],["e5",1],["e6",1],["e7",1],["e8",1],["e9",1],["e10",1],["e11",1]]},{"id":"s2","t":"响应：结果怎么回来","steps":[["e11r",1],["e10r",1],["e9r",1],["e12",1],["e13",1],["e14",1]]}]}</script>
+<script>
+(function(){
+"use strict";
+var D=JSON.parse(document.getElementById('map-data').textContent);
+var W=D.W,H=D.H,GROUPS=D.GROUPS,NODES=D.NODES,EDGES=D.EDGES,SCENES=D.SCENES;
+var byId={},gById={}; NODES.forEach(function(n){byId[n.id]=n}); GROUPS.forEach(function(g){gById[g.id]=g});
+
+/* ---------- 几何 ---------- */
+function anchor(n,side){
+  var r={x1:n.x,x2:n.x+n.w,y1:n.y,y2:n.y+n.h};
+  if(side==='l')return[r.x1,(r.y1+r.y2)/2];
+  if(side==='r')return[r.x2,(r.y1+r.y2)/2];
+  if(side==='t')return[(r.x1+r.x2)/2,r.y1];
+  return[(r.x1+r.x2)/2,r.y2];
+}
+function autoSides(a,b){
+  var dx=(b.x+b.w/2)-(a.x+a.w/2), dy=(b.y+b.h/2)-(a.y+a.h/2);
+  if(Math.abs(dx)>Math.abs(dy)*1.15) return dx>0?['r','l']:['l','r'];
+  return dy>0?['b','t']:['t','b'];
+}
+function ptsOf(e){
+  var a=byId[e.from], b=byId[e.to], sa=e.fromSide, sb=e.toSide;
+  if(!sa||!sb){ var s=autoSides(a,b); sa=sa||s[0]; sb=sb||s[1]; }
+  var p0=e.fromAt||anchor(a,sa), p1=e.toAt||anchor(b,sb);
+  var pts=[p0];
+  if(e.via) pts=pts.concat(e.via);
+  pts.push(p1);
+  return pts;
+}
+function pathOf(pts){
+  var d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);
+  for(var i=1;i<pts.length;i++) d+='L'+pts[i][0].toFixed(1)+' '+pts[i][1].toFixed(1);
+  return d;
+}
+function arcTable(pts){
+  var seg=[],total=0;
+  for(var i=0;i<pts.length-1;i++){
+    var dx=pts[i+1][0]-pts[i][0], dy=pts[i+1][1]-pts[i][1];
+    var L=Math.sqrt(dx*dx+dy*dy);
+    seg.push({x:pts[i][0],y:pts[i][1],dx:dx/L,dy:dy/L,len:L,start:total});
+    total+=L;
+  }
+  return {seg:seg,len:total||1};
+}
+function pointAt(tab,t){
+  t=Math.max(0,Math.min(1,t));
+  var d=t*tab.len;
+  for(var i=0;i<tab.seg.length;i++){
+    var s=tab.seg[i];
+    if(d<=s.start+s.len||i===tab.seg.length-1){
+      var k=Math.min(1,(d-s.start)/s.len);
+      return [s.x+s.dx*s.len*k, s.y+s.dy*s.len*k];
+    }
+  }
+  return [tab.seg[0].x,tab.seg[0].y];
+}
+
+/* ---------- 渲染 ---------- */
+var NS='http://www.w3.org/2000/svg';
+var SVGTAGS={svg:1,g:1,path:1,circle:1,rect:1,defs:1,marker:1,line:1,polyline:1,text:1};
+function el(tag,cls,attrs){
+  var e = SVGTAGS[tag] ? document.createElementNS(NS,tag) : document.createElement(tag);
+  if(cls)e.setAttribute('class',cls);
+  if(attrs)for(var k in attrs)e.setAttribute(k,attrs[k]);
+  return e;
+}
+var svg=document.getElementById('wires');
+var defs=el('defs');
+[['req','var(--req)'],['ret','var(--ret)'],['cfg','var(--cfg)'],['both','var(--both)']].forEach(function(m){
+  var mk=el('marker',null,{id:'arw-'+m[0],viewBox:'0 0 10 10',refX:'8',refY:'5',
+    markerWidth:'6',markerHeight:'6',orient:'auto-start-reverse'});
+  var p=el('path',null,{d:'M0 0 L10 5 L0 10 z',fill:m[1]});
+  mk.appendChild(p); defs.appendChild(mk);
+});
+svg.appendChild(defs);
+
+var lamps=[],tokens=[];
+EDGES.forEach(function(e){
+  e.pts=ptsOf(e); e.tab=arcTable(e.pts); e.d=pathOf(e.pts);
+  e.el=el('path','wire k-'+e.kind+(e.thin?' thin':''),{d:e.d,'marker-end':'url(#arw-'+e.kind+')'});
+  svg.appendChild(e.el);
+  var hit=el('path','hit',{d:e.d,fill:'none'});
+  svg.appendChild(hit);
+  hit.addEventListener('mouseenter',function(){ showEdge(e); });
+  hit.addEventListener('click',function(){ showEdge(e,true); });
+  // 光点
+  var n=(e.tab.len>420?2:1);
+  for(var i=0;i<n;i++){
+    var g=el('g','tok t-'+e.kind);
+    g.appendChild(el('circle','h',{r:9,cx:0,cy:0}));
+    g.appendChild(el('circle','b',{r:4,cx:0,cy:0}));
+    svg.appendChild(g);
+    tokens.push({e:e,g:g,t:i/n,sp:(e.kind==='ret'?46:58)});
+  }
+});
+
+// 组
+var grps=document.getElementById('grps');
+GROUPS.forEach(function(g){
+  var d=el('div','grp '+g.tone,{id:'g-'+g.id});
+  d.style.left=g.x+'px'; d.style.top=g.y+'px'; d.style.width=g.w+'px'; d.style.height=g.h+'px';
+  if(g.tone==='obs') d.style.borderStyle='dotted';
+  var t=el('div','leg'); t.textContent=g.t; d.appendChild(t);
+  grps.appendChild(d);
+});
+
+// 节点
+var nodesBox=document.getElementById('nodes');
+NODES.forEach(function(n){
+  var d=el('div','node k-'+n.k,{id:'n-'+n.id});
+  d.style.left=n.x+'px'; d.style.top=n.y+'px'; d.style.width=n.w+'px'; d.style.height=n.h+'px';
+  var t=el('div','t'); t.textContent=n.t; d.appendChild(t);
+  if(n.s){ var s=el('div','s'); s.textContent=n.s; d.appendChild(s); }
+  d.addEventListener('mouseenter',function(){ showNode(n); });
+  d.addEventListener('click',function(){ showNode(n,true); });
+  nodesBox.appendChild(d);
+  n.el=d;
+});
+
+// 标签
+var lbls=document.getElementById('lbls');
+EDGES.forEach(function(e){
+  if(!e.label) return;
+  var at=(e.labelAt!=null?e.labelAt:.5);
+  var p=pointAt(e.tab,at);
+  var d=el('div','lbl k-'+e.kind);
+  d.textContent=e.label;
+  d.style.left=p[0]+'px'; d.style.top=(p[1]-13)+'px';
+  lbls.appendChild(d);
+  e.lblEl=d;
+});
+
+/* ---------- 面板 ---------- */
+var pName=document.getElementById('pName'),pMeta=document.getElementById('pMeta'),
+    pPass=document.getElementById('pPass'),pRet=document.getElementById('pRet'),pWhy=document.getElementById('pWhy');
+function showNode(n,pin){
+  pName.textContent=n.t;
+  pMeta.textContent=gById[n.g]?gById[n.g].t:'';
+  pPass.textContent=n.info.inp;
+  pRet.textContent=n.info.out;
+  pWhy.textContent=n.info.role;
+  NODES.forEach(function(x){ x.el.classList.remove('sel'); });
+  if(pin) n.el.classList.add('sel');
+}
+function showEdge(e,pin){
+  var a=byId[e.from],b=byId[e.to];
+  pName.textContent=a.t+' → '+b.t;
+  pMeta.textContent=KINDNAME[e.kind]+' · '+Math.round(e.tab.len)+'px';
+  pPass.textContent=e.p;
+  pRet.textContent=e.r;
+  pWhy.textContent=e.w;
+  if(pin) flash(e);
+}
+function flash(e){
+  e.el.classList.add('lit');
+  setTimeout(function(){ if(!demo.on) e.el.classList.remove('lit'); },900);
+}
+
+/* ---------- 动画 ---------- */
+var stage=document.getElementById('stage'),canvas=document.getElementById('canvas');
+function fit(){
+  var k=Math.min(1, stage.clientWidth/W);
+  canvas.style.transform='translateX('+Math.max(0,(stage.clientWidth-W*k)/2)+'px) scale('+k+')';
+  stage.style.height=(H*k)+'px';
+}
+if(window.ResizeObserver){ new ResizeObserver(fit).observe(stage); } else { window.addEventListener('resize',fit); }
+fit();
+
+var reduce=false;
+try{ reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+
+var amb={on:!reduce};
+var demo={on:false, scene:0, step:0, prog:0, dur:900, token:null, raf:0, state:'idle', hold:0};
+var speed=1;
+
+var playBtn=document.getElementById('playBtn'),resetBtn=document.getElementById('resetBtn'),
+    scBtns=[document.getElementById('sc1'),document.getElementById('sc2'),document.getElementById('sc3')],
+    speedBtn=document.getElementById('speedBtn'),stepTxt=document.getElementById('stepTxt');
+
+// 演示用的大光点
+var bigTok=el('g','tok big hide');
+bigTok.appendChild(el('circle','h',{r:12,cx:0,cy:0}));
+bigTok.appendChild(el('circle','b',{r:7,cx:0,cy:0}));
+svg.appendChild(bigTok);
+
+function clearLit(){
+  EDGES.forEach(function(e){ e.el.classList.remove('lit','dim'); if(e.lblEl) e.lblEl.style.opacity=''; });
+  NODES.forEach(function(n){ n.el.classList.remove('lit'); });
+}
+function litPath(edge,fromNode,toNode){
+  clearLit();
+  edge.el.classList.add('lit');
+  EDGES.forEach(function(e){ if(e!==edge) e.el.classList.add('dim'); });
+  var a=byId[fromNode],b=byId[toNode];
+  if(a)a.el.classList.add('lit');
+  if(b)b.el.classList.add('lit');
+}
+function edgePayload(e){
+  var a=byId[e.from],b=byId[e.to];
+  pName.textContent=a.t+' → '+b.t;
+  pMeta.textContent='演示中 · '+(e.label||'');
+  pPass.textContent=e.p; pRet.textContent=e.r; pWhy.textContent=e.w;
+}
+
+function startScene(i){
+  demo.scene=i; demo.step=0; demo.prog=0;
+  scBtns.forEach(function(b,k){ b.classList.toggle('on',k===i); });
+  amb.on=(i===2);
+  if(i===2){
+    demo.on=false; demo.state='idle';
+    clearLit(); bigTok.classList.add('hide');
+    stepTxt.textContent='全览：所有流向同时流动';
+    pName.textContent='全览'; pMeta.textContent='16 条数据流';
+    pPass.textContent='蓝：请求（人/事件 → 执行）';
+    pRet.textContent='绿：响应与结果回流';
+    pWhy.textContent='换到「请求链」或「响应链」可以逐跳看每条边上到底传什么。';
+    playBtn.textContent='▶ 播放演示';
+    return;
+  }
+  demo.on=true; demo.state='moving';
+  runStep();
+}
+function runStep(){
+  var sc=SCENES[demo.scene];
+  if(!sc){ return; }
+  if(demo.step>=sc.steps.length){ demo.state='done'; demo.on=false; amb.on=true;
+    playBtn.textContent='▶ 播放演示'; stepTxt.textContent='演示结束 · '+(demo.scene===0?'请求链':'响应链');
+    clearLit(); bigTok.classList.add('hide'); return; }
+  var st=sc.steps[demo.step], e=byIdEdge(st[0]);
+  var a=st[1]===1?e.from:e.to, b=st[1]===1?e.to:e.from;
+  demo.cur=e; demo.dir=st[1]; demo.prog=0;
+  demo.dur=Math.max(620, Math.min(2400, e.tab.len/0.9))/speed;
+  demo.state='moving';
+  litPath(e,a,b);
+  edgePayload(e);
+  bigTok.classList.remove('hide');
+  bigTok.setAttribute('class','tok big t-'+e.kind);
+  stepTxt.textContent=(demo.step+1)+' / '+sc.steps.length+' 跳 · '+edgeName(e);
+  placeBig(0);
+}
+function placeBig(p){
+  var e=demo.cur; if(!e) return;
+  var t=(demo.dir===1?p:1-p);
+  var pt=pointAt(e.tab,t);
+  bigTok.setAttribute('transform','translate('+pt[0]+','+pt[1]+')');
+}
+var KINDNAME={req:'请求传递',ret:'响应回流',cfg:'配置/状态',both:'双向'};
+function short(s,n){ s=String(s||''); return s.length>n? s.slice(0,n)+'…' : s; }
+function edgeName(e){ return e.label || short(e.p,14) || KINDNAME[e.kind] || '数据流'; }
+function byIdEdge(id){ for(var i=0;i<EDGES.length;i++) if(EDGES[i].id===id) return EDGES[i]; }
+
+var last=0;
+function frame(ts){
+  if(!last) last=ts;
+  var dt=Math.min(60,ts-last); last=ts;
+
+  if(amb.on){
+    for(var i=0;i<tokens.length;i++){
+      var tk=tokens[i];
+      tk.t+= (tk.sp*speed*dt/1000)/tk.e.tab.len;
+      if(tk.t>=1) tk.t-=1;
+      var pt=pointAt(tk.e.tab,tk.t);
+      tk.g.setAttribute('transform','translate('+pt[0]+','+pt[1]+')');
+      tk.g.classList.remove('hide');
+    }
+  }else{
+    for(var j=0;j<tokens.length;j++) tokens[j].g.classList.add('hide');
+  }
+
+  if(demo.on&&demo.state==='moving'){
+    demo.prog+=dt/demo.dur;
+    if(demo.prog>=1){ demo.prog=1; placeBig(1);
+      demo.state='hold'; demo.hold=0.18;
+    } else placeBig(demo.prog);
+  }else if(demo.on&&demo.state==='hold'){
+    demo.hold-=dt/1000;
+    if(demo.hold<=0){ demo.step++; runStep(); }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- 交互 ---------- */
+playBtn.addEventListener('click',function(){
+  if(demo.scene===2 && !demo.on){ startScene(0); return; }
+  demo.on=!demo.on;
+  if(demo.on){
+    if(demo.state==='done'||demo.state==='idle'){ startScene(demo.scene); }
+    playBtn.textContent='❚❚ 暂停';
+  }else{
+    playBtn.textContent='▶ 播放演示';
+    stepTxt.textContent='已暂停';
+  }
+});
+resetBtn.addEventListener('click',function(){ startScene(demo.scene); });
+scBtns[0].addEventListener('click',function(){ startScene(0); });
+scBtns[1].addEventListener('click',function(){ startScene(1); });
+scBtns[2].addEventListener('click',function(){ startScene(2); });
+speedBtn.addEventListener('click',function(){
+  speed=speed===1?1.8:(speed===1.8?0.6:1);
+  speedBtn.textContent=speed+'×';
+});
+document.addEventListener('keydown',function(e){
+  var t=(e.target.tagName||'').toLowerCase(); if(t==='input'||t==='textarea')return;
+  if(e.code==='Space'){ e.preventDefault(); playBtn.click(); }
+  else if(e.key==='ArrowRight'){ if(demo.scene<2){ if(demo.step<SCENES[demo.scene].steps.length-1) demo.step++; startScene(demo.scene); } }
+  else if(e.key==='ArrowLeft'){ if(demo.scene<2){ demo.step=Math.max(0,demo.step-1); startScene(demo.scene); } }
+  else if(/^[123]$/.test(e.key)){ startScene(parseInt(e.key,10)-1); }
+});
+
+/* ---------- 主题 ---------- */
+var root=document.documentElement, tb=document.getElementById('themeBtn');
+var order=['auto','light','dark'], saved='auto';
+try{ saved=localStorage.getItem('dsh-map-theme')||'auto'; }catch(e){}
+function applyTheme(t){ root.setAttribute('data-theme',t);
+  tb.textContent='🌗 '+({auto:'跟随系统',light:'浅色',dark:'深色'}[t]);
+  try{ localStorage.setItem('dsh-map-theme',t); }catch(e){} }
+applyTheme(order.indexOf(saved)>=0?saved:'auto');
+tb.addEventListener('click',function(){ var c=root.getAttribute('data-theme')||'auto'; applyTheme(order[(order.indexOf(c)+1)%order.length]); });
+
+/* 计数与默认状态 */
+function setTxt(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
+setTxt('cNodes',NODES.length); setTxt('cEdges',EDGES.length); setTxt('cGrps',GROUPS.length);
+stepTxt.textContent='待机 · 点击任意对象查看';
+})();
+</script>
+</body>
+</html>
